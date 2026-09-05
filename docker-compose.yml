@@ -1,0 +1,13 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: neurox
+      POSTGRES_USER: neurox
+      POSTGRES_PASSWORD: neurox
+    ports:
+      - "5432:5432"
+    volumes:
+      - neurox_data:/var/lib/postgresql/data
+volumes:
+  neurox_data:

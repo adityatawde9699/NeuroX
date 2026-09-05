@@ -1,0 +1,24 @@
+"""Authentication primitives shared by route handlers."""
+import os
+from datetime import datetime, timedelta, timezone
+from typing import Any
+from fastapi import HTTPException, status
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+
+ALGORITHM = "HS256"
+JWT_SECRET = os.getenv("JWT_SECRET", "development-only-change-me")
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "14"))
+password_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+def hash_password(password: str) -> str: return password_context.hash(password)
+def verify_password(password: str, hashed_password: str) -> bool: return password_context.verify(password, hashed_password)
+def create_access_token(user: Any) -> str:
+    expiry = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    return jwt.encode({"sub": user.id, "email": user.email, "role": user.role, "type": "access", "exp": expiry}, JWT_SECRET, algorithm=ALGORITHM)
+def create_refresh_token(user: Any, session_id: str) -> str:
+    expiry = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    return jwt.encode({"sub": user.id, "sid": session_id, "type": "refresh", "exp": expiry}, JWT_SECRET, algorithm=ALGORITHM)
+def decode_access_token(token: str) -> dict[str, Any]:
+    try: return jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
+    except JWTError as exc: raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Your session is invalid or has expired.") from exc

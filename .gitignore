@@ -1,0 +1,54 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+backend/.venv/
+.pytest_cache/
+.mypy_cache/
+coverage.xml
+htmlcov/
+backend/neurox.db
+*.sqlite
+*.sqlite3
+
+# Node / Vite
+node_modules/
+web/caregiver-dashboard/node_modules/
+web/caregiver-dashboard/dist/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Android / Gradle / Android Studio
+.gradle/
+**/build/
+android/.idea/
+android/**/*.iml
+*.apk
+*.aab
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/
+*.log
