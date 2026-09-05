@@ -38,11 +38,44 @@ docker-compose.yml           Local PostgreSQL service
 
 ## Quick start
 
-### 1. Configure environment
+### 1. Install prerequisites
 
-Copy `.env.example` values into your shell or a private `.env` file. Never commit real secrets.
+Install Git, Python 3.11+, Node.js 20+, npm, and Docker Desktop (optional, only required for PostgreSQL). Android development additionally requires Android Studio.
 
-For local development, SQLite is used when `DATABASE_URL` is omitted. To use PostgreSQL:
+#### Linux (Ubuntu/Debian)
+
+```bash
+sudo apt update
+sudo apt install -y git python3 python3-venv python3-pip nodejs npm docker.io docker-compose-plugin
+git clone https://github.com/adityatawde9699/NeuroX.git
+cd NeuroX
+```
+
+#### macOS
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+brew install git python node
+brew install --cask docker
+git clone https://github.com/adityatawde9699/NeuroX.git
+cd NeuroX
+```
+
+#### Windows (PowerShell)
+
+Install Git, Python, Node.js, and Docker Desktop from their official installers, or use `winget`:
+
+```powershell
+winget install Git.Git Python.Python.3.12 OpenJS.NodeJS.LTS Docker.DockerDesktop
+git clone https://github.com/adityatawde9699/NeuroX.git
+Set-Location NeuroX
+```
+
+### 2. Configure environment and database
+
+Copy `.env.example` values into your shell or a private `.env` file. Never commit real secrets. SQLite is used when `DATABASE_URL` is omitted. To use PostgreSQL, run:
+
+Linux/macOS:
 
 ```bash
 docker compose up -d db
@@ -50,13 +83,33 @@ export DATABASE_URL='postgresql+psycopg://neurox:neurox@localhost:5432/neurox'
 export JWT_SECRET='replace-this-with-a-long-random-secret'
 ```
 
-### 2. Start the backend
+Windows PowerShell:
+
+```powershell
+docker compose up -d db
+$env:DATABASE_URL = 'postgresql+psycopg://neurox:neurox@localhost:5432/neurox'
+$env:JWT_SECRET = 'replace-this-with-a-long-random-secret'
+```
+
+### 3. Start the backend
+
+Linux/macOS:
 
 ```bash
 cd backend
-python -m venv .venv
-. .venv/bin/activate
-pip install -r requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+uvicorn app.main:app --reload
+```
+
+Windows PowerShell:
+
+```powershell
+Set-Location backend
+py -3 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
@@ -67,7 +120,9 @@ Email:    anita@neurox.demo
 Password: NeuroXDemo!2026
 ```
 
-### 3. Start the caregiver dashboard
+### 4. Start the caregiver dashboard
+
+Linux/macOS:
 
 ```bash
 cd web/caregiver-dashboard
@@ -75,9 +130,17 @@ npm install
 npm run dev
 ```
 
+Windows PowerShell:
+
+```powershell
+Set-Location web\caregiver-dashboard
+npm install
+npm run dev
+```
+
 Open `http://localhost:5173`.
 
-### 4. Android app
+### 5. Android app
 
 Open `android/NeuroX` in a current stable Android Studio, allow Gradle sync, then run on an Android emulator or device with API 26+.
 

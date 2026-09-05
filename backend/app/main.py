@@ -6,8 +6,8 @@ from sqlalchemy.orm import Session
 from app.ai.personalization.adaptive_difficulty import PerformanceInput, recommend_difficulty
 from app.auth import REFRESH_TOKEN_EXPIRE_DAYS, create_access_token, create_refresh_token, decode_access_token, hash_password, verify_password
 from app.database import Base, engine, get_db
-from app.models import RefreshSession, User
-from app.schemas import ActivityCompletion, AuthResponse, GoogleLoginRequest, LoginRequest, RefreshRequest, RegisterRequest, Role
+from app.models import ActivitySession, RefreshSession, Reminder, User
+from app.schemas import ActivityCompletion, ActivityStart, AuthResponse, GoogleLoginRequest, LoginRequest, RefreshRequest, RegisterRequest, ReminderCreate, ReminderUpdate, Role
 from app.services.google_auth import verify_google_credential
 
 app = FastAPI(title="NeuroX API", version="0.3.0", description="Supportive engagement APIs — not clinical diagnosis.")
@@ -21,8 +21,13 @@ def initialise_database():
         if not db.query(User).filter(User.email == "anita@neurox.demo").first():
             db.add(User(id="caregiver-anita", name="Anita Devi", email="anita@neurox.demo", role=Role.CAREGIVER.value, password_hash=hash_password("NeuroXDemo!2026")))
             db.commit()
+        if not db.query(Reminder).filter(Reminder.patient_id == "maya-demo").first():
+            today = datetime.now(timezone.utc).replace(hour=9, minute=0, second=0, microsecond=0)
+            db.add_all([Reminder(patient_id="maya-demo", type="medication", title="Medication", description="Take morning medicine", scheduled_time=today, repeat_rule="daily", completed=True), Reminder(patient_id="maya-demo", type="hydration", title="Hydration", description="Have a glass of water", scheduled_time=today + timedelta(hours=1, minutes=30), repeat_rule="daily")])
+            db.commit()
 
 def public_user(user: User) -> dict: return {"id":user.id,"name":user.name,"email":user.email,"role":user.role}
+def public_reminder(reminder: Reminder) -> dict: return {"id":reminder.id,"patientId":reminder.patient_id,"type":reminder.type,"title":reminder.title,"description":reminder.description,"scheduledTime":reminder.scheduled_time,"repeatRule":reminder.repeat_rule,"enabled":reminder.enabled,"completed":reminder.completed}
 def session_for(user: User, db: Session) -> AuthResponse:
     session_id = str(uuid4())
     db.add(RefreshSession(id=session_id, user_id=user.id, expires_at=datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)))
@@ -76,9 +81,43 @@ def me(user: User = Depends(current_user)): return public_user(user)
 def patient(patient_id: str, _: User = Depends(caregiver_only)): return {"id":patient_id,"name":"Maya Devi","age":72,"preferredLanguage":"Assamese","caregiver":"Anita Devi"}
 @app.get("/activities")
 def activities(_: User = Depends(current_user)): return ACTIVITIES
+@app.get("/patients/{patient_id}/reminders")
+def reminders(patient_id: str, _: User = Depends(caregiver_only), db: Session = Depends(get_db)):
+    return [public_reminder(item) for item in db.query(Reminder).filter(Reminder.patient_id == patient_id).order_by(Reminder.scheduled_time).all()]
+@app.post("/reminders", status_code=201)
+def create_reminder(request: ReminderCreate, _: User = Depends(caregiver_only), db: Session = Depends(get_db)):
+    reminder = Reminder(**request.model_dump()); db.add(reminder); db.commit(); db.refresh(reminder); return public_reminder(reminder)
+@app.put("/reminders/{reminder_id}")
+def update_reminder(reminder_id: str, request: ReminderUpdate, _: User = Depends(caregiver_only), db: Session = Depends(get_db)):
+    reminder = db.get(Reminder, reminder_id)
+    if not reminder: raise HTTPException(status_code=404, detail="Reminder not found.")
+    for field, value in request.model_dump(exclude_unset=True).items(): setattr(reminder, field, value)
+    db.commit(); db.refresh(reminder); return public_reminder(reminder)
+@app.delete("/reminders/{reminder_id}", status_code=204)
+def delete_reminder(reminder_id: str, _: User = Depends(caregiver_only), db: Session = Depends(get_db)):
+    reminder = db.get(Reminder, reminder_id)
+    if not reminder: raise HTTPException(status_code=404, detail="Reminder not found.")
+    db.delete(reminder); db.commit()
+@app.post("/activities/{activity_id}/start", status_code=201)
+def start_activity(activity_id: str, session: ActivityStart, _: User = Depends(current_user), db: Session = Depends(get_db)):
+    if not any(activity["id"] == activity_id for activity in ACTIVITIES): raise HTTPException(status_code=404, detail="Activity not found.")
+    existing = db.query(ActivitySession).filter(ActivitySession.event_id == session.event_id).first()
+    if existing: return {"session_id": existing.id, "event_id": existing.event_id, "status": existing.completion_status, "duplicate": True}
+    activity_session = ActivitySession(event_id=session.event_id, user_id=session.user_id, activity_id=activity_id, started_at=session.started_at, difficulty_level=session.difficulty_level, offline_created=session.offline_created)
+    db.add(activity_session); db.commit(); db.refresh(activity_session)
+    return {"session_id": activity_session.id, "event_id": activity_session.event_id, "status": "started", "duplicate": False}
 @app.post("/activities/{activity_id}/complete")
-def complete_activity(activity_id: str, session: ActivityCompletion, _: User = Depends(current_user)):
+def complete_activity(activity_id: str, session: ActivityCompletion, _: User = Depends(current_user), db: Session = Depends(get_db)):
+    if not any(activity["id"] == activity_id for activity in ACTIVITIES): raise HTTPException(status_code=404, detail="Activity not found.")
+    activity_session = db.query(ActivitySession).filter(ActivitySession.event_id == session.event_id).first()
+    if not activity_session:
+        activity_session = ActivitySession(event_id=session.event_id, user_id=session.user_id, activity_id=activity_id, started_at=session.started_at, difficulty_level=session.difficulty_level, offline_created=session.offline_created); db.add(activity_session)
+    activity_session.completed_at = session.completed_at; activity_session.accuracy = session.accuracy; activity_session.response_time = session.response_time; activity_session.attempts = session.attempts; activity_session.completion_status = session.completion_status; db.commit()
     next_level, score = recommend_difficulty(PerformanceInput(session.accuracy, session.response_time, 1 if session.completion_status == "completed" else 0, session.difficulty_level)); return {"saved":True,"event_id":session.event_id,"next_difficulty":next_level,"performance_score":score,"message":"Your next activity is adjusted to your performance."}
+@app.get("/patients/{patient_id}/activity-sessions")
+def activity_history(patient_id: str, _: User = Depends(caregiver_only), db: Session = Depends(get_db)):
+    sessions = db.query(ActivitySession).filter(ActivitySession.user_id == patient_id).order_by(ActivitySession.started_at.desc()).limit(30).all()
+    return [{"id": item.id, "activityId": item.activity_id, "startedAt": item.started_at, "completedAt": item.completed_at, "accuracy": item.accuracy, "responseTime": item.response_time, "attempts": item.attempts, "status": item.completion_status, "difficulty": item.difficulty_level} for item in sessions]
 @app.get("/patients/{patient_id}/performance")
 def performance(patient_id: str, _: User = Depends(caregiver_only)): return {"patientId":patient_id,"note":"Supportive activity performance, not a medical assessment.","accuracy":.80,"responseTime":4.2,"difficulty":2,"completion":[80,100,80,90]}
 @app.get("/patients/{patient_id}/safety")

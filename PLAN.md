@@ -17,20 +17,28 @@ Phase 1 is complete as a working foundation:
 - Deterministic adaptive-difficulty service
 - Project documentation, Docker PostgreSQL service, environment template, MIT license, and Git repository setup
 
+Phase 2 is in progress:
+
+- Patient Activities, Reminders, Safety, and Profile navigation destinations are implemented as Android prototype screens.
+- Memory Match and Remember the Objects are playable, with large controls, progress, completion feedback, attempts, and response-time display.
+- Activity sessions are persisted through FastAPI with idempotent event IDs and start, complete, and history APIs.
+- Reminder records are persisted through FastAPI with list, create, update, delete, and completion-state support.
+- Android reminder UI supports marking a hydration reminder as done locally.
+
 ## Phase 2 — Patient MVP
 
 Goal: deliver the essential elderly-user experience with simple, usable activity and reminder flows.
 
-1. Build patient navigation destinations: Activities, Reminders, Safety, and Profile.
-2. Implement Memory Match and Remember the Objects with large controls, voice instructions, progress, and completion screens.
-3. Record activity session data: activity ID, timestamps, accuracy, response time, attempts, completion status, difficulty, sync state, and event ID.
-4. Implement reminder cards for medication, hydration, appointments, and activities.
-5. Add loading, empty, error, offline, and success states to every patient screen.
+1. ✅ Build patient navigation destinations: Activities, Reminders, Safety, and Profile.
+2. ✅ Implement Memory Match and Remember the Objects with large controls, progress, and completion screens. Voice instructions remain part of Phase 4.
+3. ✅ Persist activity ID, timestamps, accuracy, response time, attempts, completion status, difficulty, offline origin, and event ID through FastAPI.
+4. ✅ Implement persistent reminder records and simple patient reminder cards.
+5. ⏳ Add Android-to-API integration plus loading, empty, error, offline, and sync-success states to every patient screen.
 
 Exit criteria:
 
-- A patient can complete an activity and see a supportive completion result.
-- A patient can see today’s reminders without navigating a complex interface.
+- ✅ A patient can complete an activity and see a supportive completion result.
+- ✅ A patient can see today’s reminders without navigating a complex interface.
 - No activity or UI describes a score as medical information.
 
 ## Phase 3 — Performance and personalization

@@ -43,3 +43,27 @@ class ActivityCompletion(BaseModel):
     difficulty_level: int = Field(ge=1, le=5)
     offline_created: bool = False
     event_id: str
+
+class ActivityStart(BaseModel):
+    user_id: str
+    difficulty_level: int = Field(ge=1, le=5)
+    started_at: datetime
+    event_id: str = Field(min_length=8, max_length=64)
+    offline_created: bool = False
+
+class ReminderCreate(BaseModel):
+    patient_id: str
+    type: str = Field(min_length=2, max_length=32)
+    title: str = Field(min_length=2, max_length=100)
+    description: str | None = Field(default=None, max_length=255)
+    scheduled_time: datetime
+    repeat_rule: str | None = Field(default=None, max_length=64)
+    enabled: bool = True
+
+class ReminderUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=2, max_length=100)
+    description: str | None = Field(default=None, max_length=255)
+    scheduled_time: datetime | None = None
+    repeat_rule: str | None = Field(default=None, max_length=64)
+    enabled: bool | None = None
+    completed: bool | None = None
