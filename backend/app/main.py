@@ -263,7 +263,17 @@ def patient_access(patient_id: str, user: User = Depends(current_user), db: Sess
         )
     return user
 
-## ===================================
+# ===================================
+#  Language Capability Registry (Phase 4)
+# ===================================
+
+LANGUAGE_CONFIG = [
+    {"languageCode": "en-IN", "languageName": "English", "speechSupported": True, "ttsSupported": True, "ttsFallbackNote": None},
+    {"languageCode": "as-IN", "languageName": "Assamese", "speechSupported": True, "ttsSupported": False, "ttsFallbackNote": "Voice guides will use English until an Assamese voice pack is installed."},
+    {"languageCode": "hi-IN", "languageName": "Hindi", "speechSupported": True, "ttsSupported": True, "ttsFallbackNote": None},
+]
+
+# ===================================
 #  API Endpoints
 # ===================================
 
@@ -272,7 +282,16 @@ def patient_access(patient_id: str, user: User = Depends(current_user), db: Sess
 def health():
     return {"status": "ok"}
 
+# Language config — public, no auth required
+@app.get("/language-config")
+def language_config():
+    """Return the static language capability registry.
+    The app never claims speech support for a language not present here.
+    """
+    return LANGUAGE_CONFIG
+
 #  User Registration
+
 @app.post("/auth/register", response_model=AuthResponse, status_code=201)
 def register(request: RegisterRequest, db: Session = Depends(get_db)):
     email = request.email.strip().lower()

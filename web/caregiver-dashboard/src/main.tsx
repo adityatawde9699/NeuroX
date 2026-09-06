@@ -14,6 +14,7 @@ function App() {
   const [user, setUser] = useState<AuthUser | null>(() => { const saved = localStorage.getItem('neurox-user'); return saved ? JSON.parse(saved) as AuthUser : null })
   const [trend, setTrend] = useState(fallbackTrend)
   const [performanceLoaded, setPerformanceLoaded] = useState(false)
+  const [patientLang, setPatientLang] = useState<LanguageConfig | null>(null)
   useEffect(() => {
     if (!user) return
     const token = localStorage.getItem('neurox-token')
@@ -30,6 +31,11 @@ function App() {
         setPerformanceLoaded(true)
       })
       .catch(() => setPerformanceLoaded(false))
+    // Fetch language config and match Maya's preferred language (Assamese)
+    fetch(`${apiUrl}/language-config`)
+      .then(r => r.ok ? r.json() as Promise<LanguageConfig[]> : Promise.reject())
+      .then(configs => { const assamese = configs.find(c => c.languageCode === 'as-IN'); if (assamese) setPatientLang(assamese) })
+      .catch(() => { /* use null; badge simply won't render */ })
   }, [user])
   if (!user) return <SignIn onAuthenticated={setUser}/>
   const signOut = () => { localStorage.removeItem('neurox-token'); localStorage.removeItem('neurox-refresh-token'); localStorage.removeItem('neurox-user'); setUser(null) }
@@ -37,7 +43,7 @@ function App() {
     <aside><div className="brand"><span className="logo">N</span><span>neuro<span>X</span></span></div><nav>{nav.map(({label,icon:Icon})=><button key={label} className={active===label?'selected':''} onClick={()=>setActive(label)}><Icon size={20}/>{label}{label==='Alerts'&&<i>2</i>}</button>)}</nav><div className="sidebar-bottom"><button><Settings size={20}/>Settings</button><button className="user" onClick={signOut} title="Sign out"><div className="avatar">{initials(user.name)}</div><div><b>{user.name}</b><small>Caregiver · Sign out</small></div><MoreHorizontal size={20}/></button></div></aside>
     <main><header><div><p className="eyebrow">CAREGIVER PORTAL</p><h1>Good morning, {user.name.split(' ')[0]}</h1><p className="subtitle">Here’s how your family members are doing today.</p></div><div className="header-actions"><button className="icon-button"><Bell size={21}/><em/></button><button className="profile">{initials(user.name)}</button></div></header>
       <section className="stats"><Stat icon={<Users/>} label="Active patients" value="3" detail="All connected today" tone="blue"/><Stat icon={<Activity/>} label="Activities today" value="8 / 10" detail="2 remaining" tone="green"/><Stat icon={<Bell/>} label="Pending alerts" value="2" detail="1 needs attention" tone="amber"/><Stat icon={<ShieldCheck/>} label="Safety status" value="All safe" detail="3 of 3 at home" tone="mint"/></section>
-      <section className="grid"><article className="panel patient"><div className="panel-head"><div><p className="eyebrow">YOUR PATIENT</p><h2>Maya Devi</h2><p>72 years · Assamese</p></div><button className="quiet">View profile <ChevronRight size={16}/></button></div><div className="patient-body"><div className="maya-avatar">MD</div><div className="patient-info"><div className="safe"><ShieldCheck size={18}/> At Home · Safe</div><p><MapPin size={16}/> Last updated 2 minutes ago</p><p><Activity size={16}/> Today’s activity: <b>Memory Match</b></p></div></div><div className="reminder"><div className="reminder-icon"><Bell size={19}/></div><div><b>Next reminder</b><p>Hydration · 10:30 AM</p></div><button>View</button></div></article>
+      <section className="grid"><article className="panel patient"><div className="panel-head"><div><p className="eyebrow">YOUR PATIENT</p><h2>Maya Devi</h2><p>72 years · Assamese</p></div><button className="quiet">View profile <ChevronRight size={16}/></button></div><div className="patient-body"><div className="maya-avatar">MD</div><div className="patient-info"><div className="safe"><ShieldCheck size={18}/> At Home · Safe</div><p><MapPin size={16}/> Last updated 2 minutes ago</p><p><Activity size={16}/> Today’s activity: <b>Memory Match</b></p><LanguageBadge config={patientLang}/></div></div><div className="reminder"><div className="reminder-icon"><Bell size={19}/></div><div><b>Next reminder</b><p>Hydration · 10:30 AM</p></div><button>View</button></div></article>
         <article className="panel performance"><div className="panel-head"><div><p className="eyebrow">ACTIVITY PERFORMANCE</p><h2>Engagement trend</h2><p>{performanceLoaded ? 'Synced from completed activity sessions' : 'Supportive engagement trend'}</p></div><button className="quiet">Report <ChevronRight size={16}/></button></div><div className="chart-top"><div><strong>{Math.round(trend.reduce((sum, point) => sum + point.value, 0) / trend.length)}%</strong><span>average completion</span></div><span className="up">Difficulty levels 1–5</span></div><div className="chart"><ResponsiveContainer width="100%" height="100%"><AreaChart data={trend}><defs><linearGradient id="fill" x1="0" x2="0" y1="0" y2="1"><stop stopColor="#4d73d9" stopOpacity=".26"/><stop offset="1" stopColor="#4d73d9" stopOpacity="0"/></linearGradient></defs><XAxis dataKey="day" axisLine={false} tickLine={false}/><Tooltip/><Area type="monotone" dataKey="value" name="Completion" stroke="#4168d5" strokeWidth={3} fill="url(#fill)"/><Line type="monotone" dataKey="accuracy" name="Accuracy" stroke="#218567" strokeWidth={2} dot={false}/></AreaChart></ResponsiveContainer></div><div className="mini-chart"><ResponsiveContainer width="100%" height="100%"><LineChart data={trend}><XAxis dataKey="day" hide/><YAxis yAxisId="response" hide domain={[0, 'dataMax + 2']}/><YAxis yAxisId="difficulty" hide domain={[1, 5]}/><Tooltip/><Line yAxisId="response" type="monotone" dataKey="response" name="Response time (sec)" stroke="#e58a4e" strokeWidth={2} dot={false}/><Line yAxisId="difficulty" type="stepAfter" dataKey="difficulty" name="Difficulty" stroke="#218567" strokeWidth={2} dot={false}/></LineChart></ResponsiveContainer></div></article>
       </section>
       <section className="lower"><article className="panel alerts"><div className="panel-head"><div><p className="eyebrow">NEEDS ATTENTION</p><h2>Recent alerts</h2></div><button className="quiet">View all <ChevronRight size={16}/></button></div><Alert color="orange" title="Medication reminder missed" detail="Maya Devi · 9:00 AM" label="Routine"/><Alert color="red" title="Expected return time exceeded" detail="Ravi Das · 8 minutes ago" label="High"/></article><article className="panel location"><div className="panel-head"><div><p className="eyebrow">LOCATION</p><h2>Last known location</h2></div><span className="online">● Online</span></div><div className="map"><div className="roads a"/><div className="roads b"/><div className="zone"><span>Maya Devi</span><MapPin fill="currentColor"/></div><div className="map-label">Home safe zone<br/><small>GPS accuracy ±18 m</small></div></div></article></section>
@@ -47,8 +53,20 @@ function App() {
 type AuthUser = { id: string; name: string; email: string; role: string }
 type AuthResponse = { access_token: string; refresh_token: string; user: AuthUser }
 type PerformanceData = { completion: number[]; accuracyScores: number[]; responseTimes: number[]; difficultyProgression: number[]; difficulty: number }
+type LanguageConfig = { languageCode: string; languageName: string; speechSupported: boolean; ttsSupported: boolean; ttsFallbackNote: string | null }
 const apiUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
 const initials = (name: string) => name.split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase()
+function LanguageBadge({ config }: { config: LanguageConfig | null }) {
+  if (!config) return null
+  return (
+    <div className="lang-badge">
+      <span className="lang-name">🌐 {config.languageName}</span>
+      <span className={`lang-pill ${config.speechSupported ? 'supported' : 'fallback'}`}>Speech {config.speechSupported ? '✓' : '⚠'}</span>
+      <span className={`lang-pill ${config.ttsSupported ? 'supported' : 'fallback'}`}>Voice guides {config.ttsSupported ? '✓' : '⚠ English fallback'}</span>
+      {config.ttsFallbackNote && <span className="lang-note">{config.ttsFallbackNote}</span>}
+    </div>
+  )
+}
 function SignIn({onAuthenticated}:{onAuthenticated:(user:AuthUser)=>void}) {
   const [email, setEmail] = useState('anita@neurox.demo'), [password, setPassword] = useState('NeuroXDemo!2026'), [error, setError] = useState(''), [loading, setLoading] = useState(false)
   const finish = (data: AuthResponse) => { localStorage.setItem('neurox-token', data.access_token); localStorage.setItem('neurox-refresh-token', data.refresh_token); localStorage.setItem('neurox-user', JSON.stringify(data.user)); onAuthenticated(data.user) }

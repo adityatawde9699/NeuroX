@@ -1,3 +1,4 @@
+
 # NeuroX Project Plan
 
 ## Product guardrails
@@ -15,10 +16,10 @@ The patient experience must remain voice-first, accessible, regional-language aw
 - ✅ Phase 1 foundation: Android prototype, caregiver dashboard shell, FastAPI service, authentication, persistence, and deterministic personalization foundation.
 - ✅ Phase 2 patient MVP: API-backed activities and reminders, patient/caregiver ownership models, emergency contacts, and loading, empty, error, offline, and sync states.
 - ✅ Phase 3 performance and personalization: persisted activity metrics, recent-history difficulty adjustment, Android next-level updates, and caregiver completion, accuracy, response-time, and difficulty charts.
+- ✅ Phase 4 voice and language: `SpeechProvider` interface with Mock/Android/Whisper implementations, `LanguageConfig` registry (Assamese/English/Hindi), `VoiceIntent` sealed hierarchy with deterministic `IntentParser`, `VoiceListeningScreen` composable with mic button, animated waveform, transcript, intent routing, and touch equivalents, language capability card on Home/Profile/dashboard, `GET /language-config` backend endpoint, and Assamese TTS fallback.
 
 ### Remaining
 
-- ⏳ Phase 4: voice provider abstraction, listening flow, intent handling, language capability configuration, and Assamese fallback behavior.
 - ⏳ Phase 5: Room-backed offline entities, idempotent sync queue, queued activity/safety events, and reconnect synchronization.
 - ⏳ Phase 6: SOS workflow, emergency-contact actions, location updates, safe zones, late-return alerts, and alert escalation.
 - ⏳ Phase 7: complete caregiver routes, protected dashboard data flows, alert acknowledgement, and patient reports.
