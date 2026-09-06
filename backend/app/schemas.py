@@ -67,3 +67,16 @@ class ReminderUpdate(BaseModel):
     repeat_rule: str | None = Field(default=None, max_length=64)
     enabled: bool | None = None
     completed: bool | None = None
+
+class EmergencyContactCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=80)
+    phone: str = Field(min_length=7, max_length=32)
+    relationship: str = Field(min_length=2, max_length=64)
+    priority: int = Field(default=1, ge=1, le=10)
+
+class EmergencyContactUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=80)
+    phone: str | None = Field(default=None, min_length=7, max_length=32)
+    relationship: str | None = Field(default=None, min_length=2, max_length=64)
+    priority: int | None = Field(default=None, ge=1, le=10)
+    active: bool | None = None

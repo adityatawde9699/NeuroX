@@ -3,11 +3,11 @@ from uuid import uuid4
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from app.ai.personalization.adaptive_difficulty import PerformanceInput, recommend_difficulty
+from app.ai.personalization.adaptive_difficulty import PerformanceInput, recommend_from_history
 from app.auth import REFRESH_TOKEN_EXPIRE_DAYS, create_access_token, create_refresh_token, decode_access_token, hash_password, verify_password
 from app.database import Base, engine, get_db
-from app.models import ActivitySession, RefreshSession, Reminder, User
-from app.schemas import ActivityCompletion, ActivityStart, AuthResponse, GoogleLoginRequest, LoginRequest, RefreshRequest, RegisterRequest, ReminderCreate, ReminderUpdate, Role
+from app.models import ActivitySession, CaregiverPatientAssignment, EmergencyContact, Patient, RefreshSession, Reminder, User
+from app.schemas import ActivityCompletion, ActivityStart, AuthResponse, EmergencyContactCreate, EmergencyContactUpdate, GoogleLoginRequest, LoginRequest, RefreshRequest, RegisterRequest, ReminderCreate, ReminderUpdate, Role
 from app.services.google_auth import verify_google_credential
 
 app = FastAPI(title="NeuroX API", version="0.3.0", description="Supportive engagement APIs — not clinical diagnosis.")
@@ -21,6 +21,14 @@ def initialise_database():
         if not db.query(User).filter(User.email == "anita@neurox.demo").first():
             db.add(User(id="caregiver-anita", name="Anita Devi", email="anita@neurox.demo", role=Role.CAREGIVER.value, password_hash=hash_password("NeuroXDemo!2026")))
             db.commit()
+        if not db.query(User).filter(User.email == "maya@neurox.demo").first():
+            db.add(User(id="maya-demo", name="Maya Devi", email="maya@neurox.demo", role=Role.PATIENT.value, password_hash=hash_password("NeuroXDemo!2026")))
+            db.commit()
+        if not db.get(Patient, "maya-demo"):
+            db.add(Patient(user_id="maya-demo", age=72, preferred_language="Assamese"))
+        if not db.query(CaregiverPatientAssignment).filter_by(caregiver_id="caregiver-anita", patient_id="maya-demo").first():
+            db.add(CaregiverPatientAssignment(caregiver_id="caregiver-anita", patient_id="maya-demo"))
+        db.commit()
         if not db.query(Reminder).filter(Reminder.patient_id == "maya-demo").first():
             today = datetime.now(timezone.utc).replace(hour=9, minute=0, second=0, microsecond=0)
             db.add_all([Reminder(patient_id="maya-demo", type="medication", title="Medication", description="Take morning medicine", scheduled_time=today, repeat_rule="daily", completed=True), Reminder(patient_id="maya-demo", type="hydration", title="Hydration", description="Have a glass of water", scheduled_time=today + timedelta(hours=1, minutes=30), repeat_rule="daily")])
@@ -28,6 +36,8 @@ def initialise_database():
 
 def public_user(user: User) -> dict: return {"id":user.id,"name":user.name,"email":user.email,"role":user.role}
 def public_reminder(reminder: Reminder) -> dict: return {"id":reminder.id,"patientId":reminder.patient_id,"type":reminder.type,"title":reminder.title,"description":reminder.description,"scheduledTime":reminder.scheduled_time,"repeatRule":reminder.repeat_rule,"enabled":reminder.enabled,"completed":reminder.completed}
+def public_patient(patient: Patient, user: User) -> dict: return {"id": user.id, "name": user.name, "email": user.email, "age": patient.age, "preferredLanguage": patient.preferred_language}
+def public_contact(contact: EmergencyContact) -> dict: return {"id": contact.id, "patientId": contact.patient_id, "name": contact.name, "phone": contact.phone, "relationship": contact.relationship, "priority": contact.priority, "active": contact.active}
 def session_for(user: User, db: Session) -> AuthResponse:
     session_id = str(uuid4())
     db.add(RefreshSession(id=session_id, user_id=user.id, expires_at=datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)))
@@ -42,6 +52,12 @@ def current_user(authorization: str | None = Header(default=None), db: Session =
     return user
 def caregiver_only(user: User = Depends(current_user)) -> User:
     if user.role not in {Role.CAREGIVER.value, Role.ADMIN.value}: raise HTTPException(status_code=403, detail="Caregiver access is required.")
+    return user
+def can_access_patient(user: User, patient_id: str, db: Session) -> bool:
+    if user.role == Role.ADMIN.value or user.id == patient_id: return True
+    return db.query(CaregiverPatientAssignment).filter_by(caregiver_id=user.id, patient_id=patient_id, active=True).first() is not None
+def patient_access(patient_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)) -> User:
+    if not can_access_patient(user, patient_id, db): raise HTTPException(status_code=403, detail="You are not assigned to this patient.")
     return user
 
 @app.get("/health")
@@ -77,50 +93,87 @@ def refresh(request: RefreshRequest, db: Session = Depends(get_db)):
     return session_for(user, db)
 @app.get("/auth/me")
 def me(user: User = Depends(current_user)): return public_user(user)
+@app.get("/patients/me")
+def my_patient(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    patient = db.get(Patient, user.id)
+    if not patient: raise HTTPException(status_code=404, detail="Patient profile not found.")
+    return public_patient(patient, user)
 @app.get("/patients/{patient_id}")
-def patient(patient_id: str, _: User = Depends(caregiver_only)): return {"id":patient_id,"name":"Maya Devi","age":72,"preferredLanguage":"Assamese","caregiver":"Anita Devi"}
+def patient(patient_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    patient_user = db.get(User, patient_id); patient_profile = db.get(Patient, patient_id)
+    if not patient_user or not patient_profile or not can_access_patient(user, patient_id, db): raise HTTPException(status_code=404, detail="Patient not found.")
+    return public_patient(patient_profile, patient_user)
+@app.get("/caregivers/me/patients")
+def assigned_patients(user: User = Depends(caregiver_only), db: Session = Depends(get_db)):
+    assignments = db.query(CaregiverPatientAssignment).filter_by(caregiver_id=user.id, active=True).all()
+    return [public_patient(db.get(Patient, item.patient_id), db.get(User, item.patient_id)) for item in assignments]
+@app.get("/patients/{patient_id}/emergency-contacts")
+def emergency_contacts(patient_id: str, _: User = Depends(patient_access), db: Session = Depends(get_db)):
+    return [public_contact(item) for item in db.query(EmergencyContact).filter_by(patient_id=patient_id, active=True).order_by(EmergencyContact.priority).all()]
+@app.post("/patients/{patient_id}/emergency-contacts", status_code=201)
+def create_emergency_contact(patient_id: str, request: EmergencyContactCreate, _: User = Depends(patient_access), db: Session = Depends(get_db)):
+    contact = EmergencyContact(patient_id=patient_id, **request.model_dump()); db.add(contact); db.commit(); db.refresh(contact); return public_contact(contact)
+@app.put("/patients/{patient_id}/emergency-contacts/{contact_id}")
+def update_emergency_contact(patient_id: str, contact_id: str, request: EmergencyContactUpdate, _: User = Depends(patient_access), db: Session = Depends(get_db)):
+    contact = db.query(EmergencyContact).filter_by(id=contact_id, patient_id=patient_id).first()
+    if not contact: raise HTTPException(status_code=404, detail="Emergency contact not found.")
+    for field, value in request.model_dump(exclude_unset=True).items(): setattr(contact, field, value)
+    db.commit(); db.refresh(contact); return public_contact(contact)
 @app.get("/activities")
 def activities(_: User = Depends(current_user)): return ACTIVITIES
 @app.get("/patients/{patient_id}/reminders")
-def reminders(patient_id: str, _: User = Depends(caregiver_only), db: Session = Depends(get_db)):
+def reminders(patient_id: str, _: User = Depends(patient_access), db: Session = Depends(get_db)):
     return [public_reminder(item) for item in db.query(Reminder).filter(Reminder.patient_id == patient_id).order_by(Reminder.scheduled_time).all()]
 @app.post("/reminders", status_code=201)
-def create_reminder(request: ReminderCreate, _: User = Depends(caregiver_only), db: Session = Depends(get_db)):
+def create_reminder(request: ReminderCreate, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    if not can_access_patient(user, request.patient_id, db): raise HTTPException(status_code=403, detail="You are not assigned to this patient.")
     reminder = Reminder(**request.model_dump()); db.add(reminder); db.commit(); db.refresh(reminder); return public_reminder(reminder)
 @app.put("/reminders/{reminder_id}")
-def update_reminder(reminder_id: str, request: ReminderUpdate, _: User = Depends(caregiver_only), db: Session = Depends(get_db)):
+def update_reminder(reminder_id: str, request: ReminderUpdate, user: User = Depends(current_user), db: Session = Depends(get_db)):
     reminder = db.get(Reminder, reminder_id)
     if not reminder: raise HTTPException(status_code=404, detail="Reminder not found.")
+    if not can_access_patient(user, reminder.patient_id, db): raise HTTPException(status_code=403, detail="You are not assigned to this patient.")
     for field, value in request.model_dump(exclude_unset=True).items(): setattr(reminder, field, value)
     db.commit(); db.refresh(reminder); return public_reminder(reminder)
 @app.delete("/reminders/{reminder_id}", status_code=204)
-def delete_reminder(reminder_id: str, _: User = Depends(caregiver_only), db: Session = Depends(get_db)):
+def delete_reminder(reminder_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
     reminder = db.get(Reminder, reminder_id)
     if not reminder: raise HTTPException(status_code=404, detail="Reminder not found.")
+    if not can_access_patient(user, reminder.patient_id, db): raise HTTPException(status_code=403, detail="You are not assigned to this patient.")
     db.delete(reminder); db.commit()
 @app.post("/activities/{activity_id}/start", status_code=201)
-def start_activity(activity_id: str, session: ActivityStart, _: User = Depends(current_user), db: Session = Depends(get_db)):
+def start_activity(activity_id: str, session: ActivityStart, user: User = Depends(current_user), db: Session = Depends(get_db)):
     if not any(activity["id"] == activity_id for activity in ACTIVITIES): raise HTTPException(status_code=404, detail="Activity not found.")
+    if session.user_id != user.id: raise HTTPException(status_code=403, detail="Activity user does not match the signed-in account.")
     existing = db.query(ActivitySession).filter(ActivitySession.event_id == session.event_id).first()
     if existing: return {"session_id": existing.id, "event_id": existing.event_id, "status": existing.completion_status, "duplicate": True}
-    activity_session = ActivitySession(event_id=session.event_id, user_id=session.user_id, activity_id=activity_id, started_at=session.started_at, difficulty_level=session.difficulty_level, offline_created=session.offline_created)
+    activity_session = ActivitySession(event_id=session.event_id, user_id=user.id, activity_id=activity_id, started_at=session.started_at, difficulty_level=session.difficulty_level, offline_created=session.offline_created)
     db.add(activity_session); db.commit(); db.refresh(activity_session)
     return {"session_id": activity_session.id, "event_id": activity_session.event_id, "status": "started", "duplicate": False}
 @app.post("/activities/{activity_id}/complete")
-def complete_activity(activity_id: str, session: ActivityCompletion, _: User = Depends(current_user), db: Session = Depends(get_db)):
+def complete_activity(activity_id: str, session: ActivityCompletion, user: User = Depends(current_user), db: Session = Depends(get_db)):
     if not any(activity["id"] == activity_id for activity in ACTIVITIES): raise HTTPException(status_code=404, detail="Activity not found.")
+    if session.user_id != user.id: raise HTTPException(status_code=403, detail="Activity user does not match the signed-in account.")
     activity_session = db.query(ActivitySession).filter(ActivitySession.event_id == session.event_id).first()
+    if activity_session and activity_session.user_id != user.id: raise HTTPException(status_code=403, detail="Activity event belongs to another account.")
     if not activity_session:
-        activity_session = ActivitySession(event_id=session.event_id, user_id=session.user_id, activity_id=activity_id, started_at=session.started_at, difficulty_level=session.difficulty_level, offline_created=session.offline_created); db.add(activity_session)
+        activity_session = ActivitySession(event_id=session.event_id, user_id=user.id, activity_id=activity_id, started_at=session.started_at, difficulty_level=session.difficulty_level, offline_created=session.offline_created); db.add(activity_session)
     activity_session.completed_at = session.completed_at; activity_session.accuracy = session.accuracy; activity_session.response_time = session.response_time; activity_session.attempts = session.attempts; activity_session.completion_status = session.completion_status; db.commit()
-    next_level, score = recommend_difficulty(PerformanceInput(session.accuracy, session.response_time, 1 if session.completion_status == "completed" else 0, session.difficulty_level)); return {"saved":True,"event_id":session.event_id,"next_difficulty":next_level,"performance_score":score,"message":"Your next activity is adjusted to your performance."}
+    history_rows = db.query(ActivitySession).filter(ActivitySession.user_id == user.id, ActivitySession.activity_id == activity_id, ActivitySession.completed_at.is_not(None), ActivitySession.event_id != session.event_id).order_by(ActivitySession.completed_at.desc()).limit(4).all()
+    current = PerformanceInput(session.accuracy, session.response_time, 1 if session.completion_status == "completed" else 0, session.difficulty_level)
+    history = [PerformanceInput(item.accuracy or 0, item.response_time or 30, 1 if item.completion_status == "completed" else 0, item.difficulty_level) for item in reversed(history_rows)]
+    next_level, score = recommend_from_history(current, history); return {"saved":True,"event_id":session.event_id,"next_difficulty":next_level,"performance_score":score,"message":"Your next activity is adjusted to your performance."}
 @app.get("/patients/{patient_id}/activity-sessions")
-def activity_history(patient_id: str, _: User = Depends(caregiver_only), db: Session = Depends(get_db)):
+def activity_history(patient_id: str, _: User = Depends(patient_access), db: Session = Depends(get_db)):
     sessions = db.query(ActivitySession).filter(ActivitySession.user_id == patient_id).order_by(ActivitySession.started_at.desc()).limit(30).all()
     return [{"id": item.id, "activityId": item.activity_id, "startedAt": item.started_at, "completedAt": item.completed_at, "accuracy": item.accuracy, "responseTime": item.response_time, "attempts": item.attempts, "status": item.completion_status, "difficulty": item.difficulty_level} for item in sessions]
 @app.get("/patients/{patient_id}/performance")
-def performance(patient_id: str, _: User = Depends(caregiver_only)): return {"patientId":patient_id,"note":"Supportive activity performance, not a medical assessment.","accuracy":.80,"responseTime":4.2,"difficulty":2,"completion":[80,100,80,90]}
+def performance(patient_id: str, _: User = Depends(patient_access), db: Session = Depends(get_db)):
+    sessions = db.query(ActivitySession).filter(ActivitySession.user_id == patient_id, ActivitySession.completed_at.is_not(None)).order_by(ActivitySession.completed_at.asc()).limit(30).all()
+    if not sessions:
+        return {"patientId":patient_id,"note":"Supportive activity performance, not a medical assessment.","accuracy":0,"responseTime":0,"difficulty":2,"completion":[],"accuracyScores":[],"responseTimes":[],"difficultyProgression":[],"sessions":0}
+    return {"patientId":patient_id,"note":"Supportive activity performance, not a medical assessment.","accuracy":round(sum(item.accuracy or 0 for item in sessions) / len(sessions), 2),"responseTime":round(sum(item.response_time or 0 for item in sessions) / len(sessions), 2),"difficulty":round(sum(item.difficulty_level for item in sessions) / len(sessions), 1),"completion":[round((1 if item.completion_status == "completed" else 0) * 100) for item in sessions],"accuracyScores":[round((item.accuracy or 0) * 100) for item in sessions],"responseTimes":[item.response_time or 0 for item in sessions],"difficultyProgression":[item.difficulty_level for item in sessions],"sessions":len(sessions)}
 @app.get("/patients/{patient_id}/safety")
-def safety(patient_id: str, _: User = Depends(caregiver_only)): return {"status":"At Home • Safe","gpsAccuracy":"±18 m","lastUpdated":"2 minutes ago","expectedReturn":"6:00 PM","connection":"Online"}
+def safety(patient_id: str, _: User = Depends(patient_access)): return {"status":"At Home • Safe","gpsAccuracy":"±18 m","lastUpdated":"2 minutes ago","expectedReturn":"6:00 PM","connection":"Online"}
 @app.post("/sync/events")
 def sync(events: list[dict], _: User = Depends(current_user)): return {"accepted":[event.get("event_id") for event in events],"syncedAt":datetime.now(timezone.utc)}

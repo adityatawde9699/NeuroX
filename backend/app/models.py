@@ -16,6 +16,29 @@ class User(Base):
     google_subject: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
+class Patient(Base):
+    __tablename__ = "patients"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    age: Mapped[int] = mapped_column(Integer)
+    preferred_language: Mapped[str] = mapped_column(String(80), default="Assamese")
+
+class CaregiverPatientAssignment(Base):
+    __tablename__ = "caregiver_patient_assignments"
+    caregiver_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    patient_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+class EmergencyContact(Base):
+    __tablename__ = "emergency_contacts"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    patient_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    name: Mapped[str] = mapped_column(String(80))
+    phone: Mapped[str] = mapped_column(String(32))
+    relationship: Mapped[str] = mapped_column(String(64))
+    priority: Mapped[int] = mapped_column(Integer, default=1)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+
 class RefreshSession(Base):
     __tablename__ = "refresh_sessions"
     id: Mapped[str] = mapped_column(String(36), primary_key=True)

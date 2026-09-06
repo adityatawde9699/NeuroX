@@ -8,6 +8,24 @@ The patient experience must remain voice-first, accessible, regional-language aw
 
 ## Current status
 
+**Last updated:** 2026-09-06
+
+### Completed
+
+- ✅ Phase 1 foundation: Android prototype, caregiver dashboard shell, FastAPI service, authentication, persistence, and deterministic personalization foundation.
+- ✅ Phase 2 patient MVP: API-backed activities and reminders, patient/caregiver ownership models, emergency contacts, and loading, empty, error, offline, and sync states.
+- ✅ Phase 3 performance and personalization: persisted activity metrics, recent-history difficulty adjustment, Android next-level updates, and caregiver completion, accuracy, response-time, and difficulty charts.
+
+### Remaining
+
+- ⏳ Phase 4: voice provider abstraction, listening flow, intent handling, language capability configuration, and Assamese fallback behavior.
+- ⏳ Phase 5: Room-backed offline entities, idempotent sync queue, queued activity/safety events, and reconnect synchronization.
+- ⏳ Phase 6: SOS workflow, emergency-contact actions, location updates, safe zones, late-return alerts, and alert escalation.
+- ⏳ Phase 7: complete caregiver routes, protected dashboard data flows, alert acknowledgement, and patient reports.
+- ⏳ Phase 8: comprehensive API/auth/sync/UI tests, accessibility review, environment/security review, demo script, and limitations documentation.
+
+Immediate next step: finish the backend safety and alert domain, then complete end-to-end automated tests and a production-readiness review.
+
 Phase 1 is complete as a working foundation:
 
 - Android Jetpack Compose patient-app scaffold with home screen and persistent navigation
@@ -17,15 +35,17 @@ Phase 1 is complete as a working foundation:
 - Deterministic adaptive-difficulty service
 - Project documentation, Docker PostgreSQL service, environment template, MIT license, and Git repository setup
 
-Phase 2 is in progress:
+Phase 2 is complete:
 
 - Patient Activities, Reminders, Safety, and Profile navigation destinations are implemented as Android prototype screens.
 - Memory Match and Remember the Objects are playable, with large controls, progress, completion feedback, attempts, and response-time display.
 - Activity sessions are persisted through FastAPI with idempotent event IDs and start, complete, and history APIs.
 - Reminder records are persisted through FastAPI with list, create, update, delete, and completion-state support.
-- Android reminder UI supports marking a hydration reminder as done locally.
+- Android patient app authenticates against FastAPI, loads activities and reminders, sends activity start/completion metrics, and marks reminders complete through the API.
+- Android screens show loading, empty, error, offline, and sync status states; emulator API traffic uses `10.0.2.2:8000`.
+- Patient, caregiver, caregiver-patient assignment, and emergency-contact models are persisted with patient ownership checks on patient-scoped routes.
 
-## Phase 2 — Patient MVP
+## Phase 2 — Patient MVP ✅
 
 Goal: deliver the essential elderly-user experience with simple, usable activity and reminder flows.
 
@@ -33,7 +53,7 @@ Goal: deliver the essential elderly-user experience with simple, usable activity
 2. ✅ Implement Memory Match and Remember the Objects with large controls, progress, and completion screens. Voice instructions remain part of Phase 4.
 3. ✅ Persist activity ID, timestamps, accuracy, response time, attempts, completion status, difficulty, offline origin, and event ID through FastAPI.
 4. ✅ Implement persistent reminder records and simple patient reminder cards.
-5. ⏳ Add Android-to-API integration plus loading, empty, error, offline, and sync-success states to every patient screen.
+5. ✅ Add Android-to-API integration plus loading, empty, error, offline, and sync-success states to every patient screen.
 
 Exit criteria:
 
@@ -41,21 +61,21 @@ Exit criteria:
 - ✅ A patient can see today’s reminders without navigating a complex interface.
 - No activity or UI describes a score as medical information.
 
-## Phase 3 — Performance and personalization
+## Phase 3 — Performance and personalization ✅
 
 Goal: use activity data to choose an appropriate next activity level.
 
-1. Persist activity sessions and performance summaries in PostgreSQL.
-2. Connect the Android app to `POST /activities/{id}/complete`.
-3. Expand the deterministic adaptive-difficulty service with recent-history inputs.
-4. Display the transparent message: “Your next activity is adjusted to your performance.”
-5. Add caregiver activity completion, accuracy, response-time, and difficulty charts.
+1. ✅ Persist activity sessions and performance summaries in PostgreSQL.
+2. ✅ Connect the Android app to `POST /activities/{id}/complete`.
+3. ✅ Expand the deterministic adaptive-difficulty service with recent-history inputs.
+4. ✅ Display the transparent message: “Your next activity is adjusted to your performance.”
+5. ✅ Add caregiver activity completion, accuracy, response-time, and difficulty charts.
 
 Exit criteria:
 
-- Difficulty remains within levels 1–5.
-- The system lowers difficulty after consistently low completion/performance and raises it after consistently strong performance.
-- Dashboard labels use “Activity Performance” and “Engagement Trend,” never clinical labels.
+- ✅ Difficulty remains within levels 1–5.
+- ✅ The system lowers difficulty after consistently low completion/performance and raises it after consistently strong performance.
+- ✅ Dashboard labels use “Activity Performance” and “Engagement Trend,” never clinical labels.
 
 ## Phase 4 — Voice and language
 

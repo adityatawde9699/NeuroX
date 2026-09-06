@@ -171,6 +171,11 @@ The dashboard sends Google’s ID credential to FastAPI. The backend verifies it
 | POST | `/auth/refresh` | Rotate a refresh token |
 | GET | `/auth/me` | Current authenticated user |
 | GET | `/activities` | Available supportive activities |
+| GET | `/patients/me` | Authenticated patient profile |
+| GET | `/patients/{id}/reminders` | Assigned patient reminders |
+| PUT | `/reminders/{id}` | Update reminder state |
+| GET | `/patients/{id}/emergency-contacts` | Assigned patient emergency contacts |
+| GET | `/caregivers/me/patients` | Patients assigned to the caregiver |
 | GET | `/patients/{id}/performance` | Activity-performance trend, not a clinical assessment |
 | GET | `/patients/{id}/safety` | Current reported safety state |
 
