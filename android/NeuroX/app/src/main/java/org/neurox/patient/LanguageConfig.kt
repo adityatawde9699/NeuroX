@@ -27,7 +27,20 @@ data class LanguageConfig(
     val languageName: String,
     val speechSupported: Boolean,
     val ttsSupported: Boolean,
-    val ttsFallbackNote: String? = null
+    val ttsFallbackNote: String? = null,
+    /**
+     * True if BHASHINI Ulca ASR supports this language.
+     * When true and a BHASHINI API key is configured, [BHASHINISpeechProvider]
+     * will be preferred over Android on-device recognition for better regional-
+     * language accuracy.
+     */
+    val bhashinSupported: Boolean = false,
+    /**
+     * Shown in the listening screen when [bhashinSupported] is true but no
+     * BHASHINI API key is configured — tells the user why enhanced speech
+     * recognition is not active.
+     */
+    val bhashinNote: String? = null
 )
 
 // ──────────────────────────────────────────────
@@ -47,20 +60,25 @@ val SUPPORTED_LANGUAGES: List<LanguageConfig> = listOf(
         languageCode = "en-IN",
         languageName = "English",
         speechSupported = true,
-        ttsSupported = true
+        ttsSupported = true,
+        bhashinSupported = false   // BHASHINI not needed; Android on-device handles English well
     ),
     LanguageConfig(
         languageCode = "as-IN",
         languageName = "Assamese",
-        speechSupported = true,          // Supported via MockSpeechProvider / AndroidSpeechProvider
+        speechSupported = true,          // Supported via MockSpeechProvider / BHASHINISpeechProvider / AndroidSpeechProvider
         ttsSupported = false,            // Android TTS does not ship an Assamese voice by default
-        ttsFallbackNote = "Voice guides will use English until an Assamese voice pack is installed."
+        ttsFallbackNote = "Voice guides will use English until an Assamese voice pack is installed.",
+        bhashinSupported = true,         // BHASHINI Ulca natively supports Assamese ASR
+        bhashinNote = "Enhanced Assamese speech recognition is available via BHASHINI. Configure a BHASHINI API key to activate it."
     ),
     LanguageConfig(
         languageCode = "hi-IN",
         languageName = "Hindi",
         speechSupported = true,
-        ttsSupported = true
+        ttsSupported = true,
+        bhashinSupported = true,         // BHASHINI also supports Hindi
+        bhashinNote = "Enhanced Hindi speech recognition is available via BHASHINI."
     )
 )
 

@@ -53,7 +53,7 @@ function App() {
 type AuthUser = { id: string; name: string; email: string; role: string }
 type AuthResponse = { access_token: string; refresh_token: string; user: AuthUser }
 type PerformanceData = { completion: number[]; accuracyScores: number[]; responseTimes: number[]; difficultyProgression: number[]; difficulty: number }
-type LanguageConfig = { languageCode: string; languageName: string; speechSupported: boolean; ttsSupported: boolean; ttsFallbackNote: string | null }
+type LanguageConfig = { languageCode: string; languageName: string; speechSupported: boolean; ttsSupported: boolean; ttsFallbackNote: string | null; bhashinSupported: boolean; bhashinNote: string | null }
 const apiUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
 const initials = (name: string) => name.split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase()
 function LanguageBadge({ config }: { config: LanguageConfig | null }) {
@@ -63,7 +63,9 @@ function LanguageBadge({ config }: { config: LanguageConfig | null }) {
       <span className="lang-name">🌐 {config.languageName}</span>
       <span className={`lang-pill ${config.speechSupported ? 'supported' : 'fallback'}`}>Speech {config.speechSupported ? '✓' : '⚠'}</span>
       <span className={`lang-pill ${config.ttsSupported ? 'supported' : 'fallback'}`}>Voice guides {config.ttsSupported ? '✓' : '⚠ English fallback'}</span>
+      {config.bhashinSupported && <span className="lang-pill bhashini">BHASHINI ✓</span>}
       {config.ttsFallbackNote && <span className="lang-note">{config.ttsFallbackNote}</span>}
+      {config.bhashinSupported && config.bhashinNote && <span className="lang-note bhashini-note">{config.bhashinNote}</span>}
     </div>
   )
 }

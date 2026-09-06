@@ -4,7 +4,6 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -375,12 +374,18 @@ private fun LanguageCapabilityCard(config: LanguageConfig) {
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(config.languageName, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Ink)
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 5.dp)) {
                     CapabilityPill("Speech", config.speechSupported)
                     CapabilityPill("Voice guides", config.ttsSupported)
+                    if (config.bhashinSupported) {
+                        CapabilityPill("BHASHINI", supported = true)
+                    }
                 }
                 if (config.ttsFallbackNote != null) {
                     Text(config.ttsFallbackNote, fontSize = 12.sp, color = Color(0xFF7A6A3A), modifier = Modifier.padding(top = 4.dp))
+                }
+                if (config.bhashinSupported && config.bhashinNote != null) {
+                    Text(config.bhashinNote, fontSize = 12.sp, color = Color(0xFF2A5AA8), modifier = Modifier.padding(top = 3.dp))
                 }
             }
         }

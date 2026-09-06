@@ -268,9 +268,33 @@ def patient_access(patient_id: str, user: User = Depends(current_user), db: Sess
 # ===================================
 
 LANGUAGE_CONFIG = [
-    {"languageCode": "en-IN", "languageName": "English", "speechSupported": True, "ttsSupported": True, "ttsFallbackNote": None},
-    {"languageCode": "as-IN", "languageName": "Assamese", "speechSupported": True, "ttsSupported": False, "ttsFallbackNote": "Voice guides will use English until an Assamese voice pack is installed."},
-    {"languageCode": "hi-IN", "languageName": "Hindi", "speechSupported": True, "ttsSupported": True, "ttsFallbackNote": None},
+    {
+        "languageCode": "en-IN",
+        "languageName": "English",
+        "speechSupported": True,
+        "ttsSupported": True,
+        "ttsFallbackNote": None,
+        "bhashinSupported": False,
+        "bhashinNote": None,
+    },
+    {
+        "languageCode": "as-IN",
+        "languageName": "Assamese",
+        "speechSupported": True,
+        "ttsSupported": False,
+        "ttsFallbackNote": "Voice guides will use English until an Assamese voice pack is installed.",
+        "bhashinSupported": True,
+        "bhashinNote": "Enhanced Assamese speech recognition is available via BHASHINI. Configure a BHASHINI API key to activate it.",
+    },
+    {
+        "languageCode": "hi-IN",
+        "languageName": "Hindi",
+        "speechSupported": True,
+        "ttsSupported": True,
+        "ttsFallbackNote": None,
+        "bhashinSupported": True,
+        "bhashinNote": "Enhanced Hindi speech recognition is available via BHASHINI.",
+    },
 ]
 
 # ===================================

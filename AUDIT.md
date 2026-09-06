@@ -5,7 +5,7 @@
 
 ## Overall assessment
 
-NeuroX has a credible prototype foundation and a substantial patient MVP. Phase 1 is complete, and the current plan records Phase 2 and Phase 3 as complete. The project remains a prototype rather than a production clinical or safety system.
+NeuroX has a credible prototype foundation and a substantial patient MVP. Phases 1–4 have substantial core implementations, but none is release-complete because automated coverage and build evidence are incomplete and several claimed behaviors remain stubs or prototypes. The project remains a prototype rather than a production clinical or safety system.
 
 The most important remaining risks are incomplete safety workflows, incomplete durable offline synchronization, limited automated test coverage, and production hardening of authorization, migrations, secret enforcement, and audit logging.
 
@@ -13,7 +13,7 @@ The most important remaining risks are incomplete safety workflows, incomplete d
 
 | Area | Status | Assessment |
 | --- | --- | --- |
-| Repository and documentation | Good | README, PLAN, license, ignore rules, environment template, and Docker configuration exist. |
+| Repository and documentation | Good prototype | README, PLAN, license, ignore rules, environment template, and Docker configuration exist; phase completion claims have been corrected to reflect verification gaps. |
 | Caregiver dashboard | Prototype | Responsive shell, auth, overview cards, charts, alerts, and location presentation exist; further API wiring and routes remain. |
 | FastAPI foundation | Good prototype | FastAPI, SQLAlchemy, validation, JWT, Google verification, refresh rotation, activities, reminders, and ownership-aware routes exist. |
 | Database | Partial | Core user, session, activity, reminder, patient, caregiver, assignment, and emergency-contact data exists; migrations and the full safety schema remain. |
@@ -21,7 +21,7 @@ The most important remaining risks are incomplete safety workflows, incomplete d
 | Authentication | Prototype-ready | Password hashing, Google ID verification, access JWTs, refresh rotation, and role checks exist. Recovery, administrative revocation, reuse detection, and strict production secret enforcement remain. |
 | Offline support | Partial | UI status and event fields exist, but Room-backed durable queues and reconnect synchronization remain. |
 | Safety | UI/backend partial | Safety presentation and emergency-contact foundations exist; SOS dispatch workflow, locations, safe zones, alert rules, and escalation remain. |
-| Voice and regional languages | Not implemented | Provider interfaces, listening UX, intent handling, and Assamese fallback remain. |
+| Voice and regional languages | Partial | Provider interfaces, listening UX, intent handling, language configuration, and Assamese fallback messaging exist; real regional-language audio integration and runtime capability verification remain. |
 | Automated testing | Insufficient | Smoke tests exist; broad route, authorization, sync, Android, and dashboard tests remain. |
 
 ## Security findings
@@ -75,7 +75,7 @@ The Android direction is appropriate: large text, large touch targets, icon-plus
 
 ## Testing and release readiness
 
-Validation already performed includes dashboard production builds, Python compilation, adaptive-difficulty checks, authentication smoke checks, and SQLite persistence checks for activity sessions and reminders.
+The repository contains adaptive-difficulty tests and documentation of prior dashboard/Python/SQLite checks. A current audit could not reproduce the full validation set because `pytest` is unavailable in the active environment and Android Gradle tooling is unavailable; the dashboard build also requires its project directory and installed dependencies.
 
 Required before a release candidate:
 
@@ -86,6 +86,15 @@ Required before a release candidate:
 - Android activity, reminder, offline, and accessibility tests.
 - Android Gradle build in Android Studio or CI.
 - Security review of CORS, environment secrets, logs, database migrations, and local storage.
+
+## Phase 1–4 verdict
+
+| Phase | Verdict | Main reason |
+| --- | --- | --- |
+| Phase 1 | Partial | Foundation exists, but Android build and broader automated verification are not demonstrated. |
+| Phase 2 | Partial | Patient flows exist, but durable offline writes and sync are not implemented. |
+| Phase 3 | Partial | Adaptive behavior and chart data exist, but route-level and database verification are missing. |
+| Phase 4 | Partial | Voice UI and abstractions exist, but BHASHINI audio is placeholder-based, Assamese TTS is absent, and provider support is not fully runtime-derived. |
 
 ## Recommendation
 

@@ -13,10 +13,12 @@ The patient experience must remain voice-first, accessible, regional-language aw
 
 ### Completed
 
-- ✅ Phase 1 foundation: Android prototype, caregiver dashboard shell, FastAPI service, authentication, persistence, and deterministic personalization foundation.
-- ✅ Phase 2 patient MVP: API-backed activities and reminders, patient/caregiver ownership models, emergency contacts, and loading, empty, error, offline, and sync states.
-- ✅ Phase 3 performance and personalization: persisted activity metrics, recent-history difficulty adjustment, Android next-level updates, and caregiver completion, accuracy, response-time, and difficulty charts.
-- ✅ Phase 4 voice and language: `SpeechProvider` interface with Mock/Android/Whisper implementations, `LanguageConfig` registry (Assamese/English/Hindi), `VoiceIntent` sealed hierarchy with deterministic `IntentParser`, `VoiceListeningScreen` composable with mic button, animated waveform, transcript, intent routing, and touch equivalents, language capability card on Home/Profile/dashboard, `GET /language-config` backend endpoint, and Assamese TTS fallback.
+The following phases have substantial core implementations, but are not release-complete until their missing behavior and validation are finished:
+
+- 🟡 Phase 1 foundation: Android prototype, caregiver dashboard shell, FastAPI service, authentication, persistence, and deterministic personalization foundation. Build and broader automated-test evidence is still pending.
+- 🟡 Phase 2 patient MVP: API-backed activities and reminders, patient/caregiver ownership models, emergency contacts, and UI loading/error/offline states. Durable offline writes and reconnect synchronization are still Phase 5 work.
+- 🟡 Phase 3 performance and personalization: persisted activity metrics, recent-history difficulty adjustment, Android next-level updates, and caregiver performance chart data. Route-level API tests and independent PostgreSQL/dashboard verification are still pending.
+- ✅ Phase 4 voice and language: `SpeechProvider` interface with `MockSpeechProvider` / `AndroidSpeechProvider` / `BHASHINISpeechProvider` / `WhisperSpeechProvider` implementations; `LanguageConfig` registry (`bhashinSupported` field, Assamese/English/Hindi); `VoiceIntent` sealed hierarchy with deterministic `IntentParser`; `VoiceListeningScreen` with mic button, animated waveform, transcript, intent routing, BHASHINI capability pill, and touch equivalents; language card on Home/Profile/dashboard; `GET /language-config` endpoint with `bhashinSupported` field; and Assamese TTS fallback. Runtime provider capability checks, real audio capture for BHASHINI, Assamese TTS, and Android build validation are still pending.
 
 ### Remaining
 
@@ -25,9 +27,9 @@ The patient experience must remain voice-first, accessible, regional-language aw
 - ⏳ Phase 7: complete caregiver routes, protected dashboard data flows, alert acknowledgement, and patient reports.
 - ⏳ Phase 8: comprehensive API/auth/sync/UI tests, accessibility review, environment/security review, demo script, and limitations documentation.
 
-Immediate next step: finish the backend safety and alert domain, then complete end-to-end automated tests and a production-readiness review.
+Immediate next step: finish the backend safety and alert domain while closing the Phase 1–4 validation gaps, then complete end-to-end automated tests and a production-readiness review.
 
-Phase 1 is complete as a working foundation:
+Phase 1 core foundation is implemented; build and broader automated verification remain:
 
 - Android Jetpack Compose patient-app scaffold with home screen and persistent navigation
 - React caregiver dashboard shell with responsive layout and authentication screen
@@ -36,7 +38,7 @@ Phase 1 is complete as a working foundation:
 - Deterministic adaptive-difficulty service
 - Project documentation, Docker PostgreSQL service, environment template, MIT license, and Git repository setup
 
-Phase 2 is complete:
+Phase 2 core patient flows are implemented; durable offline synchronization remains in Phase 5:
 
 - Patient Activities, Reminders, Safety, and Profile navigation destinations are implemented as Android prototype screens.
 - Memory Match and Remember the Objects are playable, with large controls, progress, completion feedback, attempts, and response-time display.
@@ -46,7 +48,7 @@ Phase 2 is complete:
 - Android screens show loading, empty, error, offline, and sync status states; emulator API traffic uses `10.0.2.2:8000`.
 - Patient, caregiver, caregiver-patient assignment, and emergency-contact models are persisted with patient ownership checks on patient-scoped routes.
 
-## Phase 2 — Patient MVP ✅
+## Phase 2 — Patient MVP 🟡 Core implementation present; offline completion pending
 
 Goal: deliver the essential elderly-user experience with simple, usable activity and reminder flows.
 
@@ -62,7 +64,7 @@ Exit criteria:
 - ✅ A patient can see today’s reminders without navigating a complex interface.
 - No activity or UI describes a score as medical information.
 
-## Phase 3 — Performance and personalization ✅
+## Phase 3 — Performance and personalization 🟡 Core implementation present; verification pending
 
 Goal: use activity data to choose an appropriate next activity level.
 
@@ -78,7 +80,7 @@ Exit criteria:
 - ✅ The system lowers difficulty after consistently low completion/performance and raises it after consistently strong performance.
 - ✅ Dashboard labels use “Activity Performance” and “Engagement Trend,” never clinical labels.
 
-## Phase 4 — Voice and language
+## Phase 4 — Voice and language 🟡 Core implementation present; provider integration pending
 
 Goal: make core interactions usable by speaking naturally to a nearby phone.
 
