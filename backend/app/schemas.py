@@ -97,3 +97,34 @@ class EmergencyContactUpdate(BaseModel):
     relationship: str | None = Field(default=None, min_length=2, max_length=64)
     priority: int | None = Field(default=None, ge=1, le=10)
     active: bool | None = None
+
+# Safety configuration
+class SafetySettingsUpdate(BaseModel):
+    safe_zone_name: str | None = Field(default=None, min_length=2, max_length=80)
+    safe_zone_latitude: float | None = Field(default=None, ge=-90, le=90)
+    safe_zone_longitude: float | None = Field(default=None, ge=-180, le=180)
+    safe_zone_radius_m: int | None = Field(default=None, ge=50, le=5000)
+    expected_return_at: datetime | None = None
+    expected_return_note: str | None = Field(default=None, max_length=160)
+    late_return_grace_minutes: int | None = Field(default=None, ge=0, le=180)
+
+# Patient location update
+class LocationUpdateCreate(BaseModel):
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+    accuracy_m: float = Field(ge=0, le=5000)
+    connection_state: str = Field(default="online", min_length=2, max_length=24)
+    captured_at: datetime
+
+# Patient SOS event
+class SOSEventCreate(BaseModel):
+    message: str = Field(
+        default="I need help. Please check on me.",
+        min_length=2,
+        max_length=255,
+    )
+    location_update_id: str | None = None
+
+# Alert acknowledgement
+class SafetyAcknowledgement(BaseModel):
+    note: str | None = Field(default=None, max_length=160)

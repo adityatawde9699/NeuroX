@@ -54,6 +54,88 @@ class EmergencyContact(Base):
     priority: Mapped[int] = mapped_column(Integer, default=1)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
 
+# SafetySettings model representing patient safety preferences
+class SafetySettings(Base):
+    __tablename__ = "safety_settings"
+    patient_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    safe_zone_name: Mapped[str] = mapped_column(String(80), default="Home safe zone")
+    safe_zone_latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    safe_zone_longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    safe_zone_radius_m: Mapped[int] = mapped_column(Integer, default=250)
+    expected_return_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    expected_return_note: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    late_return_grace_minutes: Mapped[int] = mapped_column(Integer, default=10)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+# LocationUpdate model representing patient location reports
+class LocationUpdate(Base):
+    __tablename__ = "location_updates"
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    patient_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    latitude: Mapped[float] = mapped_column(Float)
+    longitude: Mapped[float] = mapped_column(Float)
+    accuracy_m: Mapped[float] = mapped_column(Float)
+    connection_state: Mapped[str] = mapped_column(String(24), default="online")
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+# SafetyAlert model representing caregiver safety workflows
+class SafetyAlert(Base):
+    __tablename__ = "safety_alerts"
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    patient_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    type: Mapped[str] = mapped_column(String(32))
+    severity: Mapped[str] = mapped_column(String(24), default="medium")
+    status: Mapped[str] = mapped_column(String(24), default="open")
+    message: Mapped[str] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    acknowledged_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    acknowledged_by: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    escalated_to_priority: Mapped[int] = mapped_column(Integer, default=1)
+    escalated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    location_update_id: Mapped[str | None] = mapped_column(
+        ForeignKey("location_updates.id"), nullable=True
+    )
+
+# SOSEvent model representing patient-triggered help requests
+class SOSEvent(Base):
+    __tablename__ = "sos_events"
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    patient_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    message: Mapped[str] = mapped_column(
+        String(255),
+        default="Patient requested caregiver help through NeuroX.",
+    )
+    status: Mapped[str] = mapped_column(String(24), default="open")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    acknowledged_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    acknowledged_by: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    escalated_to_priority: Mapped[int] = mapped_column(Integer, default=1)
+    escalated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    location_update_id: Mapped[str | None] = mapped_column(
+        ForeignKey("location_updates.id"), nullable=True
+    )
+
 # RefreshSession model representing refresh token sessions for users
 class RefreshSession(Base):
     __tablename__ = "refresh_sessions"

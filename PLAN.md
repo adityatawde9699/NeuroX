@@ -9,7 +9,7 @@ The patient experience must remain voice-first, accessible, regional-language aw
 
 ## Current status
 
-**Last updated:** 2026-09-06
+**Last updated:** 2026-09-07
 
 ### Completed
 
@@ -19,15 +19,15 @@ The following phases have substantial core implementations, but are not release-
 - 🟡 Phase 2 patient MVP: API-backed activities and reminders, patient/caregiver ownership models, emergency contacts, and UI loading/error/offline states. Durable offline writes and reconnect synchronization are still Phase 5 work.
 - 🟡 Phase 3 performance and personalization: persisted activity metrics, recent-history difficulty adjustment, Android next-level updates, and caregiver performance chart data. Route-level API tests and independent PostgreSQL/dashboard verification are still pending.
 - ✅ Phase 4 voice and language: `SpeechProvider` interface with `MockSpeechProvider` / `AndroidSpeechProvider` / `BHASHINISpeechProvider` / `WhisperSpeechProvider` implementations; `LanguageConfig` registry (`bhashinSupported` field, Assamese/English/Hindi); `VoiceIntent` sealed hierarchy with deterministic `IntentParser`; `VoiceListeningScreen` with mic button, animated waveform, transcript, intent routing, BHASHINI capability pill, and touch equivalents; language card on Home/Profile/dashboard; `GET /language-config` endpoint with `bhashinSupported` field; and Assamese TTS fallback. Runtime provider capability checks, real audio capture for BHASHINI, Assamese TTS, and Android build validation are still pending.
+- 🟡 Phase 6 safety support: persistent safety settings, emergency contacts, location updates, SOS caregiver workflow events, acknowledgement APIs, last-known-location labeling, safe-zone exit alerts, late-return alerts, and prototype primary-to-secondary escalation are implemented. Durable offline safety queues, real push/SMS delivery, route-level tests, and migration coverage are still pending.
 
 ### Remaining
 
 - ⏳ Phase 5: Room-backed offline entities, idempotent sync queue, queued activity/safety events, and reconnect synchronization.
-- ⏳ Phase 6: SOS workflow, emergency-contact actions, location updates, safe zones, late-return alerts, and alert escalation.
-- ⏳ Phase 7: complete caregiver routes, protected dashboard data flows, alert acknowledgement, and patient reports.
+- ⏳ Phase 7: complete caregiver routes, protected dashboard data flows beyond the safety/overview prototype, and patient reports.
 - ⏳ Phase 8: comprehensive API/auth/sync/UI tests, accessibility review, environment/security review, demo script, and limitations documentation.
 
-Immediate next step: finish the backend safety and alert domain while closing the Phase 1–4 validation gaps, then complete end-to-end automated tests and a production-readiness review.
+Immediate next step: add durable offline sync for activity and safety events while closing the Phase 1–4 and Phase 6 validation gaps, then complete end-to-end automated tests and a production-readiness review.
 
 Phase 1 core foundation is implemented; build and broader automated verification remain:
 
@@ -110,21 +110,28 @@ Exit criteria:
 - Activities, local history, reminders, and emergency contacts work without backend availability.
 - Repeated synchronization never creates duplicate activity events.
 
-## Phase 6 — Safety support
+## Phase 6 — Safety support 🟡 Core implementation present; delivery and verification pending
 
 Goal: provide transparent, permission-aware caregiver safety support.
 
-1. Add emergency contacts, SOS event creation, and caregiver acknowledgement APIs.
-2. Add a patient Safety screen with status, GPS accuracy, expected return time, contacts, “I Need Help,” and SOS.
-3. Add safe-zone and expected-return configuration to the caregiver dashboard.
-4. Add location updates, last-known-location state, safe-zone exit checks, and late-return alerts.
-5. Implement prototype alert escalation: primary caregiver, then secondary caregiver when unacknowledged.
+1. ✅ Add emergency contacts, SOS event creation, and caregiver acknowledgement APIs.
+2. ✅ Add a patient Safety screen with status, GPS accuracy, expected return time, contacts, “I Need Help,” and SOS.
+3. ✅ Add safe-zone and expected-return configuration to the caregiver dashboard.
+4. ✅ Add location updates, last-known-location state, safe-zone exit checks, and late-return alerts.
+5. ✅ Implement prototype alert escalation: primary caregiver, then secondary caregiver when unacknowledged.
 
 Exit criteria:
 
-- Location always displays its freshness, accuracy, and connection state.
-- Offline users see “Last known location,” not real-time claims.
-- SOS is clearly described as a caregiver workflow, not direct government/emergency-service integration.
+- ✅ Location always displays its freshness, accuracy, and connection state.
+- ✅ Offline users see “Last known location,” not real-time claims.
+- ✅ SOS is clearly described as a caregiver workflow, not direct government/emergency-service integration.
+
+Remaining validation and production gaps:
+
+- Add API route tests for SOS creation, acknowledgement, safe-zone exit alerts, late-return alerts, and escalation.
+- Persist schema changes through migrations before PostgreSQL deployment.
+- Connect real delivery channels for caregiver notification; current escalation is API-visible prototype state.
+- Queue location and SOS events locally in the Android app while offline as part of Phase 5.
 
 ## Phase 7 — Caregiver dashboard completion
 
