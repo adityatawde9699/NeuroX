@@ -16,6 +16,11 @@ from passlib.context import CryptContext
 
 ALGORITHM = "HS256"
 JWT_SECRET = os.getenv("JWT_SECRET", "development-only-change-me")
+APP_ENV = os.getenv("APP_ENV", "development").lower()
+if APP_ENV in {"production", "staging"} and (
+    JWT_SECRET == "development-only-change-me" or len(JWT_SECRET) < 32
+):
+    raise RuntimeError("JWT_SECRET must be a unique value of at least 32 characters outside development.")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "14"))
 password_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

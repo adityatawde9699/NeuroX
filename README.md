@@ -183,7 +183,11 @@ The dashboard sends Google’s ID credential to FastAPI. The backend verifies it
 
 ```bash
 cd web/caregiver-dashboard && npm run build
-cd ../../backend && python -m compileall -q app
+cd ../../backend && python -m pip install -r requirements-dev.txt
+python -m pytest -q
+python -m compileall -q app tests
+# Apply schema migrations before staging or production startup.
+alembic upgrade head
 ```
 
 ## Product limitations

@@ -114,7 +114,10 @@ fun VoiceListeningScreen(
     }
 
     fun startListening() {
-        if (!languageConfig.speechSupported) return
+        if (!languageConfig.speechSupported || !speechProvider.isSupported(languageConfig.languageCode)) {
+            statusMessage = "Speech is not available for ${languageConfig.languageName}. Use the touch options below."
+            return
+        }
         isListening = true
         transcript = ""
         resolvedIntent = null

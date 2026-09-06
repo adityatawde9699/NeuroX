@@ -1,0 +1,12 @@
+export type AuthUser = { id: string; name: string; email: string; role: string }
+export type AuthResponse = { access_token: string; refresh_token: string; user: AuthUser }
+export type Patient = { id: string; name: string; email: string; age: number; preferredLanguage: string }
+export type PerformanceData = { patientId: string; completion: number[]; accuracyScores: number[]; responseTimes: number[]; difficultyProgression: number[]; difficulty: number; sessions: number; note: string }
+export type LanguageConfig = { languageCode: string; languageName: string; speechSupported: boolean; ttsSupported: boolean; ttsFallbackNote: string | null; bhashinSupported: boolean; bhashinNote: string | null }
+export type Contact = { id: string; name: string; phone: string; relationship: string; priority: number; active: boolean }
+export type SafetyLocation = { id: string; latitude: number; longitude: number; accuracyM: number; connectionState: string; capturedAt: string; freshness: string; label: string }
+export type SafetySettings = { safeZoneName: string; safeZoneLatitude: number | null; safeZoneLongitude: number | null; safeZoneRadiusM: number; expectedReturnAt: string | null; expectedReturnNote: string | null; lateReturnGraceMinutes: number }
+export type SafetyAlert = { id: string; type: string; severity: string; message: string; createdAt: string; escalatedToPriority: number; escalatedContact?: Contact | null }
+export type SosEvent = { id: string; message: string; createdAt: string; escalatedToPriority: number; escalatedContact?: Contact | null; workflowNote: string }
+export type SafetyState = { patientId: string; status: string; location: SafetyLocation | null; settings: SafetySettings; contacts: Contact[]; alerts: SafetyAlert[]; sosEvents: SosEvent[]; workflowNote: string }
+export type TrendPoint = { day: string; value: number; accuracy: number; response: number; difficulty: number }

@@ -7,31 +7,30 @@
 
 NeuroX has a credible prototype foundation and a substantial patient MVP. Phases 1–4 and Phase 6 have substantial core implementations, but most are not release-complete because automated coverage, migration coverage, production delivery channels, and build evidence are incomplete. The project remains a prototype rather than a production clinical or safety system.
 
-The most important remaining risks are incomplete durable offline synchronization, limited automated test coverage, production hardening of authorization, migrations, secret enforcement, audit logging, and real caregiver alert delivery.
+The most important remaining risks are limited Android/dashboard automated coverage, external caregiver delivery, background safety evaluation, incomplete settings and nested dashboard routes, and Android build evidence.
 
 ## Status summary
 
 | Area | Status | Assessment |
 | --- | --- | --- |
 | Repository and documentation | Good prototype | README, PLAN, license, ignore rules, environment template, and Docker configuration exist; phase completion claims have been corrected to reflect verification gaps. |
-| Caregiver dashboard | Prototype | Responsive shell, auth, overview cards, charts, language badge, safety workflow, acknowledgement actions, and safe-zone/return configuration exist; further routes and reports remain. |
+| Caregiver dashboard | Modular prototype | Typed API client, refresh/logout handling, patient-preserving URL navigation, reusable sidebar/async states, bootstrap hook, patient profile/activity/alert/report/settings pages, report filters/series, location history/configuration, profile/password management, contact CRUD, and protected Phase 7 APIs exist; frontend tests remain. |
 | FastAPI foundation | Good prototype | FastAPI, SQLAlchemy, validation, JWT, Google verification, refresh rotation, activities, reminders, safety state, SOS events, and ownership-aware routes exist. |
-| Database | Partial | Core user, session, activity, reminder, patient, caregiver, assignment, emergency-contact, safety settings, location, alert, and SOS data exists; migrations remain. |
-| Android patient app | Early MVP | Accessible navigation, activities, reminders, safety/profile screens, API states, and metrics exist; Room sync and complete safety actions remain. |
-| Authentication | Prototype-ready | Password hashing, Google ID verification, access JWTs, refresh rotation, and role checks exist. Recovery, administrative revocation, reuse detection, and strict production secret enforcement remain. |
-| Offline support | Partial | UI status and event fields exist, but Room-backed durable queues and reconnect synchronization remain. |
-| Safety | Core prototype | SOS event creation, caregiver acknowledgement, safety settings, last-known-location state, safe-zone exit checks, late-return alerts, emergency contacts, and primary-to-secondary prototype escalation exist. Durable offline queues, real push/SMS delivery, migrations, and route tests remain. |
-| Voice and regional languages | Partial | Provider interfaces, listening UX, intent handling, language configuration, and Assamese fallback messaging exist; real regional-language audio integration and runtime capability verification remain. |
-| Automated testing | Insufficient | Smoke tests exist; broad route, authorization, sync, Android, and dashboard tests remain. |
+| Database | Improved prototype | SQLAlchemy models, sync-event persistence, and an initial Alembic migration exist; PostgreSQL migration execution and future schema migration discipline remain. |
+| Android patient app | Early MVP | Accessible navigation, activities, reminders, safety actions, Room caches, WorkManager scheduling, provider selection, permission flow, and API states exist; Gradle build evidence, UI tests, and full safety/location integration verification remain. |
+| Authentication | Hardened prototype | Password hashing, Google ID verification, access JWTs, refresh rotation, logout revocation, role checks, production secret validation, and environment-driven CORS exist. Rate limiting, recovery, device metadata, and audit logging remain. |
+| Offline support | Partial implementation | Room-backed structured caches and pending events, idempotent server sync, WorkManager reconnect scheduling, activity/reminder/SOS/location queueing, conflict handling, and duplicate handling exist; full sync-state UI and Android end-to-end verification remain. |
+| Safety | Core prototype | SOS/location/settings APIs, Android queueing, browser geolocation, dashboard error states, freshness labels, migrations, route smoke coverage, safe-zone checks, late-return checks, and prototype escalation exist. Real multi-channel delivery and background evaluation remain. |
+| Voice and regional languages | Partial | Runtime provider selection, capability checks, microphone permission flow, listening UX, intent handling, language configuration, and fallback messaging exist; BHASHINI audio capture and Assamese TTS remain. |
+| Automated testing | Improving but incomplete | 16 backend tests, compile checks, migration smoke checks, dashboard production build/lint, browser route checks, and Android diagnostics pass; Android Gradle, dashboard route/component, PostgreSQL, and broader authorization/safety tests remain. |
 
 ## Security findings
 
-1. **High — verify patient ownership everywhere.** Patient-scoped routes need a consistent caregiver-patient assignment dependency, including future activity, reminder, location, alert, and SOS routes.
-2. **Medium — enforce production JWT secrets.** The development fallback for `JWT_SECRET` must be rejected outside development, with minimum length validation.
-3. **Medium — harden refresh sessions.** Add logout/revocation, device/session metadata, reuse detection, and cleanup of expired sessions.
-4. **Medium — configure CORS by environment.** Replace the development-only origin with an explicit deployment allowlist.
-5. **Medium — add rate limiting.** Protect login, registration, Google sign-in, refresh, location update, acknowledgement, and SOS endpoints.
-6. **Low — add migrations.** Introduce Alembic before deploying schema changes to PostgreSQL.
+1. **High — verify patient ownership everywhere.** Current routes use ownership checks, but broader route-level authorization tests are still needed for every patient-scoped activity, reminder, location, alert, and SOS path.
+2. **Medium — harden refresh sessions further.** Logout/revocation and reuse rejection now exist; device/session metadata, cleanup of expired sessions, and audit events remain.
+3. **Medium — configure CORS by environment.** An environment-driven allowlist now exists; deployment values still need review.
+4. **Medium — add rate limiting.** Protect login, registration, Google sign-in, refresh, location update, acknowledgement, and SOS endpoints.
+5. **Low — maintain migrations.** An initial Alembic migration exists; future model changes require generated migrations and PostgreSQL verification.
 
 ## Privacy findings
 
@@ -55,11 +54,12 @@ Implemented foundation:
 Remaining backend work:
 
 - Real caregiver delivery channels for SOS, emergency-contact, and alert workflows
-- Dashboard overview aggregation and reports
-- Durable sync-event storage, deduplication, retry, and conflict handling
+- Broader caregiver account/session management beyond profile/password updates
+- Broader dashboard aggregation and report pagination
+- Background safety evaluation and notification delivery
 - Consistent response schemas, pagination, and API versioning
-- Alembic migrations for the safety schema
-- Route tests for safety authorization, safe-zone exit, late-return, acknowledgement, and escalation
+- PostgreSQL execution of the initial Alembic migration and future safety-schema migrations
+- Dedicated response/authorization tests for reports, alert history, location history, safe-zone exit, late-return, escalation, and contact/profile mutations
 
 ## Accessibility findings
 
@@ -74,37 +74,43 @@ The Android direction is appropriate: large text, large touch targets, icon-plus
 
 ## Testing and release readiness
 
-The repository contains adaptive-difficulty tests and documentation of prior dashboard/Python/SQLite checks. A current frontend production build passes after the Phase 6 merge. Backend Python checks could not run because the local virtual environment points to a missing Python install and no system Python is available; Android Gradle tooling is also unavailable in the active environment.
+The repository now contains adaptive-difficulty, API smoke/sync/safety, and Phase 7 route smoke tests. Backend tests, compilation, an isolated Alembic upgrade/downgrade, dashboard production build/lint, browser checks for live routes, and Android diagnostics pass, but Android Gradle tooling is unavailable in the active environment.
 
 Required before a release candidate:
 
 - FastAPI route tests for authentication, ownership, forbidden access, reminders, activities, safety settings, location updates, SOS, acknowledgement, and escalation.
 - Refresh-token expiry, revocation, rotation, and reuse tests.
-- Duplicate sync-event and concurrent update tests.
-- Dashboard loading, error, empty, and authenticated-route tests.
+- Duplicate sync-event tests and concurrent update tests.
+- Dashboard loading, error, empty, authenticated-route, patient-selection, acknowledgement, and report tests.
 - Android activity, reminder, offline, and accessibility tests.
 - Android Gradle build in Android Studio or CI.
-- Security review of CORS, environment secrets, logs, database migrations, and local storage.
+- Security review of logs, database migrations, local token storage, notification consent, and location retention.
 
 ## Phase 1–4 verdict
 
 | Phase | Verdict | Main reason |
 | --- | --- | --- |
-| Phase 1 | Partial | Foundation exists, but Android build and broader automated verification are not demonstrated. |
-| Phase 2 | Partial | Patient flows exist, but durable offline writes and sync are not implemented. |
-| Phase 3 | Partial | Adaptive behavior and chart data exist, but route-level and database verification are missing. |
-| Phase 4 | Partial | Voice UI and abstractions exist, but BHASHINI audio is placeholder-based, Assamese TTS is absent, and provider support is not fully runtime-derived. |
+| Phase 1 | Partial | Foundation, auth hardening, migrations, backend tests, and dashboard build are verified; Android build and broader UI verification are not demonstrated. |
+| Phase 2 | Partial | Patient flows, structured offline caches, and background synchronization exist; Android UI and end-to-end emulator verification remain. |
+| Phase 3 | Partial | Adaptive behavior, chart data, and sync coverage exist; dedicated performance-route/PostgreSQL verification remains. |
+| Phase 4 | Partial | Runtime provider selection and capability checks exist; BHASHINI audio capture, Assamese TTS, and Android build verification remain. |
 
 ## Phase 6 verdict
 
 | Phase | Verdict | Main reason |
 | --- | --- | --- |
-| Phase 6 | Partial | Safety APIs and dashboard/patient UI are implemented, including last-known-location wording and prototype escalation, but offline safety sync, real caregiver delivery, migrations, and route tests remain. |
+| Phase 6 | Partial | Safety APIs, queued safety events, browser geolocation, initial migration coverage, route smoke coverage, and prototype escalation exist; background evaluation and real caregiver delivery remain. |
+
+## Phase 7 verdict
+
+| Phase | Verdict | Main reason |
+| --- | --- | --- |
+| Phase 7 | Partial | Modular API/page/layout/hook foundations, patient-preserving nested routes, profile/activity/alert/report/location/settings flows, caregiver profile/password settings, and contact CRUD exist; frontend tests, PostgreSQL verification, and complete dashboard coverage remain. |
 
 ## Recommendation
 
-Keep NeuroX in prototype/demo status. Do not use real clinical or continuous location data until ownership authorization, offline synchronization, real safety delivery, secret enforcement, migrations, audit logging, and test coverage are complete and reviewed.
+Keep NeuroX in prototype/demo status. Do not use real clinical or continuous location data until background sync, ownership authorization review, real safety delivery, background escalation, audit logging, and Android/PostgreSQL verification are complete.
 
 ## Recommended next milestone
 
-Implement durable offline sync for activity and safety events, add route-level tests for the new safety domain, and introduce migrations before PostgreSQL deployment.
+Add frontend route/component tests, configured caregiver delivery, background safety evaluation, and Android/PostgreSQL release verification.

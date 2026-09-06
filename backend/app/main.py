@@ -3,9 +3,12 @@
 # ===================================
 from datetime import datetime, timedelta, timezone
 from math import asin, cos, radians, sin, sqrt
+import os
 from uuid import uuid4
-from fastapi import Depends, FastAPI, Header, HTTPException, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 from app.ai.personalization.adaptive_difficulty import (
     PerformanceInput,
@@ -31,6 +34,7 @@ from app.models import (
     SafetyAlert,
     SafetySettings,
     SOSEvent,
+    SyncEvent,
     User,
 )
 from app.schemas import (
@@ -50,6 +54,9 @@ from app.schemas import (
     SafetyAcknowledgement,
     SafetySettingsUpdate,
     SOSEventCreate,
+    SyncEventRequest,
+    UserProfileUpdate,
+    PasswordChangeRequest,
 )
 from app.services.google_auth import verify_google_credential
 
@@ -62,9 +69,14 @@ app = FastAPI(
     version="0.3.0",
     description="Supportive engagement APIs — not clinical diagnosis.",
 )
+cors_origins = [
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
+    if origin.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -94,7 +106,8 @@ ACTIVITIES = [
 
 @app.on_event("startup")
 def initialise_database():
-    Base.metadata.create_all(bind=engine)
+    if os.getenv("APP_ENV", "development").lower() == "development":
+        Base.metadata.create_all(bind=engine)
     with Session(bind=engine) as db:
         if not db.query(User).filter(User.email == "anita@neurox.demo").first():
             db.add(
@@ -645,10 +658,41 @@ def refresh(request: RefreshRequest, db: Session = Depends(get_db)):
     db.commit()
     return session_for(user, db)
 
+
+@app.post("/auth/logout")
+def logout(request: RefreshRequest, db: Session = Depends(get_db)):
+    payload = decode_access_token(request.refresh_token)
+    if payload.get("type") != "refresh":
+        raise HTTPException(status_code=401, detail="A refresh token is required.")
+    token_session = db.get(RefreshSession, payload.get("sid"))
+    if token_session:
+        token_session.revoked = True
+        db.commit()
+    return {"loggedOut": True}
+
 # User Profile
 @app.get("/auth/me")
 def me(user: User = Depends(current_user)):
     return public_user(user)
+
+
+@app.put("/auth/me")
+def update_current_user(request: UserProfileUpdate, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    user.name = request.name.strip()
+    db.commit()
+    db.refresh(user)
+    return public_user(user)
+
+
+@app.put("/auth/me/password")
+def update_current_password(request: PasswordChangeRequest, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    if not user.password_hash or not verify_password(request.current_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect.")
+    if request.current_password == request.new_password:
+        raise HTTPException(status_code=400, detail="New password must be different.")
+    user.password_hash = hash_password(request.new_password)
+    db.commit()
+    return {"updated": True}
 
 # Patient Profile
 @app.get("/patients/me")
@@ -1006,6 +1050,74 @@ def performance(
         "sessions": len(sessions),
     }
 
+
+@app.get("/patients/{patient_id}/reports/activity")
+def activity_report(
+    patient_id: str,
+    from_date: datetime | None = Query(default=None, alias="from"),
+    to_date: datetime | None = Query(default=None, alias="to"),
+    activity_id: str | None = None,
+    limit: int = Query(default=30, ge=1, le=100),
+    _: User = Depends(patient_access),
+    db: Session = Depends(get_db),
+):
+    query = db.query(ActivitySession).filter(ActivitySession.user_id == patient_id)
+    if from_date:
+        query = query.filter(ActivitySession.started_at >= from_date)
+    if to_date:
+        query = query.filter(ActivitySession.started_at <= to_date)
+    if activity_id:
+        query = query.filter(ActivitySession.activity_id == activity_id)
+    sessions = query.filter(ActivitySession.completed_at.is_not(None)).order_by(ActivitySession.started_at.asc()).limit(limit).all()
+    completion_rate = sum(item.completion_status == "completed" for item in sessions) / len(sessions) if sessions else 0
+    return {
+        "patientId": patient_id,
+        "summary": {
+            "sessions": len(sessions),
+            "completionRate": round(completion_rate, 2),
+            "averageAccuracy": round(sum(item.accuracy or 0 for item in sessions) / len(sessions), 2) if sessions else 0,
+            "averageResponseTime": round(sum(item.response_time or 0 for item in sessions) / len(sessions), 2) if sessions else 0,
+            "averageDifficulty": round(sum(item.difficulty_level for item in sessions) / len(sessions), 2) if sessions else 0,
+        },
+        "series": [
+            {"date": item.completed_at, "completionRate": 1 if item.completion_status == "completed" else 0, "accuracy": item.accuracy or 0, "responseTime": item.response_time or 0, "difficulty": item.difficulty_level}
+            for item in sessions
+        ],
+        "note": "Supportive activity performance, not a medical assessment.",
+    }
+
+
+@app.get("/patients/{patient_id}/alerts")
+def alert_history(
+    patient_id: str,
+    alert_status: str = Query(default="open", alias="status", pattern="^(open|acknowledged|all)$"),
+    severity: str | None = None,
+    limit: int = Query(default=50, ge=1, le=100),
+    _: User = Depends(patient_access),
+    db: Session = Depends(get_db),
+):
+    alert_query = db.query(SafetyAlert).filter(SafetyAlert.patient_id == patient_id)
+    sos_query = db.query(SOSEvent).filter(SOSEvent.patient_id == patient_id)
+    if alert_status != "all":
+        alert_query = alert_query.filter(SafetyAlert.status == alert_status)
+        sos_query = sos_query.filter(SOSEvent.status == alert_status)
+    if severity:
+        alert_query = alert_query.filter(SafetyAlert.severity == severity)
+    alerts = [{**public_alert(item, db), "kind": "safety_alert"} for item in alert_query.order_by(SafetyAlert.created_at.desc()).limit(limit).all()]
+    alerts.extend({**public_sos(item, db), "kind": "sos"} for item in sos_query.order_by(SOSEvent.created_at.desc()).limit(limit).all())
+    return sorted(alerts, key=lambda item: item["createdAt"], reverse=True)[:limit]
+
+
+@app.get("/patients/{patient_id}/location-updates")
+def location_history(
+    patient_id: str,
+    limit: int = Query(default=50, ge=1, le=100),
+    _: User = Depends(patient_access),
+    db: Session = Depends(get_db),
+):
+    locations = db.query(LocationUpdate).filter_by(patient_id=patient_id).order_by(LocationUpdate.captured_at.desc()).limit(limit).all()
+    return [public_location(item) for item in locations]
+
 # Get a patient's safety status
 @app.get("/patients/{patient_id}/safety")
 def safety(
@@ -1149,10 +1261,94 @@ def acknowledge_safety_alert(
     db.refresh(alert)
     return public_alert(alert, db)
 
-# Sync events
+# Process one offline mutation against the same persistence models as online APIs.
+def apply_sync_event(event: SyncEventRequest, user: User, db: Session) -> dict:
+    if not can_access_patient(user, event.patient_id, db):
+        raise HTTPException(status_code=403, detail="You are not assigned to this patient.")
+
+    if event.event_type == "activity_completion":
+        payload = ActivityCompletion.model_validate(event.payload)
+        if payload.event_id != event.event_id:
+            raise HTTPException(status_code=422, detail="Activity event IDs must match.")
+        if payload.user_id != user.id or payload.user_id != event.patient_id:
+            raise HTTPException(status_code=403, detail="Activity user does not match the event patient.")
+        result = complete_activity(payload.activity_id, payload, user, db)
+    elif event.event_type == "reminder_update":
+        reminder_id = event.payload.get("reminder_id")
+        if not isinstance(reminder_id, str):
+            raise HTTPException(status_code=422, detail="reminder_id is required.")
+        payload = ReminderUpdate.model_validate(event.payload.get("changes", {}))
+        result = update_reminder(reminder_id, payload, user, db)
+    elif event.event_type == "location_update":
+        payload = LocationUpdateCreate.model_validate(event.payload)
+        latest = latest_location(event.patient_id, db)
+        if latest and as_utc(payload.captured_at) <= as_utc(latest.captured_at):
+            raise HTTPException(
+                status_code=409,
+                detail="Location update is older than the latest stored location.",
+            )
+        result = create_location_update(event.patient_id, payload, user, db)
+    elif event.event_type == "safety_settings_update":
+        payload = SafetySettingsUpdate.model_validate(event.payload)
+        result = update_safety_settings(event.patient_id, payload, user, db)
+    elif event.event_type == "sos_event":
+        payload = SOSEventCreate.model_validate(event.payload)
+        result = create_sos_event(event.patient_id, payload, user, db)
+    else:
+        raise HTTPException(status_code=422, detail=f"Unsupported sync event type: {event.event_type}")
+    return {"event_id": event.event_id, "status": "accepted", "result": result}
+
+
 @app.post("/sync/events")
-def sync(events: list[dict], _: User = Depends(current_user)):
-    return {
-        "accepted": [event.get("event_id") for event in events],
-        "syncedAt": datetime.now(timezone.utc),
-    }
+def sync(events: list[SyncEventRequest], user: User = Depends(current_user), db: Session = Depends(get_db)):
+    results = []
+    for event in events:
+        existing = db.get(SyncEvent, event.event_id)
+        if existing:
+            if (
+                existing.user_id != user.id
+                or existing.patient_id != event.patient_id
+                or existing.event_type != event.event_type
+                or existing.payload != event.payload
+            ):
+                results.append(
+                    {
+                        "event_id": event.event_id,
+                        "status": "conflict",
+                        "detail": "Event ID is already associated with different event data.",
+                    }
+                )
+                continue
+            results.append({"event_id": event.event_id, "status": "duplicate", "result": existing.result})
+            continue
+        try:
+            processed = apply_sync_event(event, user, db)
+            record = SyncEvent(
+                event_id=event.event_id,
+                user_id=user.id,
+                patient_id=event.patient_id,
+                event_type=event.event_type,
+                payload=event.payload,
+                status="accepted",
+                result=jsonable_encoder(processed["result"]),
+            )
+            db.add(record)
+            db.commit()
+            results.append(processed)
+        except (HTTPException, ValidationError) as exc:
+            db.rollback()
+            detail = exc.detail if isinstance(exc, HTTPException) else "Invalid sync event payload."
+            status_text = "conflict" if isinstance(exc, HTTPException) and exc.status_code == 409 else "rejected"
+            record = SyncEvent(
+                event_id=event.event_id,
+                user_id=user.id,
+                patient_id=event.patient_id,
+                event_type=event.event_type,
+                payload=event.payload,
+                status=status_text,
+                result={"detail": detail},
+            )
+            db.add(record)
+            db.commit()
+            results.append({"event_id": event.event_id, "status": status_text, "detail": detail})
+    return {"results": results, "syncedAt": datetime.now(timezone.utc)}

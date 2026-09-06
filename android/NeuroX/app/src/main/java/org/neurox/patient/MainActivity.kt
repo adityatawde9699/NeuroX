@@ -2,7 +2,11 @@ package org.neurox.patient
 
 import android.os.Bundle
 import android.content.Context
+import android.Manifest
+import android.content.pm.PackageManager
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -16,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -51,6 +56,7 @@ fun NeuroXApp() {
     var showVoiceScreen by remember { mutableStateOf(false) }
     var activities by remember { mutableStateOf(fallbackActivities) }
     var reminders by remember { mutableStateOf(emptyList<ReminderItem>()) }
+    var safety by remember { mutableStateOf<SafetyState?>(null) }
     var patientName by rememberSaveable { mutableStateOf("Maya") }
     var preferredLanguage by rememberSaveable { mutableStateOf("Assamese") }
     var activeEventId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -59,13 +65,17 @@ fun NeuroXApp() {
     val context = LocalContext.current
     val repository = remember { NeuroXRepository(context) }
     val scope = rememberCoroutineScope()
+    val microphonePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (!granted) syncState = SyncState.Error
+    }
 
-    // Build the speech provider once; MockSpeechProvider for demo mode.
-    val speechProvider = remember { buildSpeechProvider(context, demoMode = true) }
+    val speechProvider = remember { buildSpeechProvider(context, demoMode = BuildConfig.DEBUG) }
 
     // Resolve language config from the patient's preferred language.
     val languageCode = remember(preferredLanguage) { languageNameToCode(preferredLanguage) }
-    val languageConfig = remember(languageCode) { languageConfigFor(languageCode) }
+    val languageConfig = remember(languageCode, speechProvider) {
+        languageConfigFor(languageCode).copy(speechSupported = languageConfigFor(languageCode).speechSupported && speechProvider.isSupported(languageCode))
+    }
 
     fun refresh() {
         scope.launch {
@@ -74,6 +84,7 @@ fun NeuroXApp() {
                 val data = repository.load()
                 activities = data.activities
                 reminders = data.reminders
+                safety = data.safety
                 patientName = data.patient.name
                 preferredLanguage = data.patient.preferredLanguage
                 syncState = SyncState.Synced
@@ -81,6 +92,7 @@ fun NeuroXApp() {
                 repository.cachedData()?.let { data ->
                     activities = data.activities
                     reminders = data.reminders
+                    safety = data.safety
                     patientName = data.patient.name
                     preferredLanguage = data.patient.preferredLanguage
                 }
@@ -113,22 +125,20 @@ fun NeuroXApp() {
         val activity = activities.firstOrNull { it.id == activityId } ?: return
         val eventId = activeEventId ?: UUID.randomUUID().toString()
         val startedAt = activeStartedAt ?: Instant.now().minusSeconds(responseTime.toLong()).toString()
+        val completion = ActivityCompletionRequest(
+            userId = repository.patientId(),
+            activityId = activity.id,
+            startedAt = startedAt,
+            completedAt = Instant.now().toString(),
+            accuracy = accuracy,
+            responseTime = responseTime.coerceAtLeast(.1f),
+            attempts = attempts.coerceAtLeast(1),
+            difficultyLevel = activity.difficulty,
+            eventId = eventId
+        )
         scope.launch {
             try {
-                val result = repository.completeActivity(
-                    activity,
-                    ActivityCompletionRequest(
-                        userId = repository.patientId(),
-                        activityId = activity.id,
-                        startedAt = startedAt,
-                        completedAt = Instant.now().toString(),
-                        accuracy = accuracy,
-                        responseTime = responseTime.coerceAtLeast(.1f),
-                        attempts = attempts.coerceAtLeast(1),
-                        difficultyLevel = activity.difficulty,
-                        eventId = eventId
-                    )
-                )
+                val result = repository.completeActivity(activity, completion)
                 result.nextDifficulty?.let { nextLevel ->
                     activities = activities.map { item ->
                         if (item.id == activity.id) item.copy(difficulty = nextLevel.coerceIn(1, 5)) else item
@@ -138,6 +148,7 @@ fun NeuroXApp() {
                 activeStartedAt = null
                 syncState = SyncState.Synced
             } catch (_: IOException) {
+                repository.queueActivityCompletion(completion.copy(offlineCreated = true))
                 syncState = SyncState.Offline
             } catch (_: Exception) {
                 syncState = SyncState.Error
@@ -145,7 +156,10 @@ fun NeuroXApp() {
         }
     }
 
-    LaunchedEffect(Unit) { refresh() }
+    LaunchedEffect(Unit) {
+        repository.schedulePendingSync()
+        refresh()
+    }
 
     MaterialTheme(colorScheme = lightColorScheme(primary = Blue, background = Color(0xFFF8FAFD))) {
         // ── Voice listening screen (full-screen overlay) ──────────────
@@ -216,7 +230,13 @@ fun NeuroXApp() {
                         reminders = reminders,
                         languageConfig = languageConfig,
                         onStart = { start(activities.firstOrNull() ?: fallbackActivities.first()) },
-                        onOpenVoice = { showVoiceScreen = true }
+                        onOpenVoice = {
+                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                                showVoiceScreen = true
+                            } else {
+                                microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+                            }
+                        }
                     )
                     tab == 1 -> Activities(Modifier.weight(1f), activities = activities, onStart = ::start)
                     tab == 2 -> Reminders(
@@ -229,6 +249,11 @@ fun NeuroXApp() {
                                     reminders = repository.load().reminders
                                     syncState = SyncState.Synced
                                 } catch (_: IOException) {
+                                    repository.markReminderCompletedLocally(id)
+                                    reminders = reminders.map { reminder ->
+                                        if (reminder.id == id) reminder.copy(completed = true) else reminder
+                                    }
+                                    repository.queueReminderUpdate(id)
                                     syncState = SyncState.Offline
                                 } catch (_: Exception) {
                                     syncState = SyncState.Error
@@ -236,7 +261,36 @@ fun NeuroXApp() {
                             }
                         }
                     )
-                    tab == 3 -> Safety(Modifier.padding(padding))
+                    tab == 3 -> Safety(
+                        Modifier.padding(padding),
+                        safety = safety,
+                        onHelp = {
+                            scope.launch {
+                                try {
+                                    repository.sendSos(SosRequest("I need help. Please check on me."))
+                                    syncState = SyncState.Synced
+                                } catch (_: IOException) {
+                                    repository.queueSos(SosRequest("I need help. Please check on me."))
+                                    syncState = SyncState.Offline
+                                } catch (_: Exception) {
+                                    syncState = SyncState.Error
+                                }
+                            }
+                        },
+                        onSos = {
+                            scope.launch {
+                                try {
+                                    repository.sendSos(SosRequest())
+                                    syncState = SyncState.Synced
+                                } catch (_: IOException) {
+                                    repository.queueSos(SosRequest())
+                                    syncState = SyncState.Offline
+                                } catch (_: Exception) {
+                                    syncState = SyncState.Error
+                                }
+                            }
+                        }
+                    )
                     else -> Profile(Modifier.weight(1f), languageConfig = languageConfig)
                 }
             }
@@ -507,22 +561,25 @@ private fun Reminders(modifier: Modifier, reminders: List<ReminderItem>, onCompl
 // ──────────────────────────────────────────────────────────────
 
 @Composable
-private fun Safety(modifier: Modifier) = Column(
+private fun Safety(modifier: Modifier, safety: SafetyState?, onHelp: () -> Unit, onSos: () -> Unit) = Column(
     modifier.fillMaxSize().padding(24.dp),
     verticalArrangement = Arrangement.spacedBy(18.dp)
 ) {
     Text("Safety", fontSize = 31.sp, fontWeight = FontWeight.Bold)
-    StatusCard("At Home · Safe", "Last updated 2 minutes ago", Icons.Default.Shield, SafeGreen)
+    StatusCard(safety?.status ?: "Safety status unavailable", "Saved safety information", Icons.Default.Shield, SafeGreen)
     StatusCard("Expected return", "6:00 PM", Icons.Default.Schedule, Blue)
-    OutlinedButton(onClick = {}, modifier = Modifier.fillMaxWidth().height(62.dp)) {
+    OutlinedButton(onClick = onHelp, modifier = Modifier.fillMaxWidth().height(62.dp)) {
         Icon(Icons.Default.Phone, null)
         Spacer(Modifier.width(10.dp))
         Text("I Need Help", fontSize = 18.sp)
     }
-    Button(onClick = {}, modifier = Modifier.fillMaxWidth().height(70.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFBD3E39))) {
+    Button(onClick = onSos, modifier = Modifier.fillMaxWidth().height(70.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFBD3E39))) {
         Icon(Icons.Default.Warning, null)
         Spacer(Modifier.width(10.dp))
         Text("SOS", fontSize = 22.sp)
+    }
+    safety?.contacts?.take(2)?.forEach { contact ->
+        StatusCard(contact.name, "${contact.relationship} · ${contact.phone}", Icons.Default.Phone, Blue)
     }
 }
 

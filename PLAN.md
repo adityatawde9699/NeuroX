@@ -13,23 +13,24 @@ The patient experience must remain voice-first, accessible, regional-language aw
 
 ### Completed
 
-The following phases have substantial core implementations, but are not release-complete until their missing behavior and validation are finished:
+The following phases have substantial core implementations. Release readiness still depends on the external integrations and Android toolchain called out below:
 
-- 🟡 Phase 1 foundation: Android prototype, caregiver dashboard shell, FastAPI service, authentication, persistence, and deterministic personalization foundation. Build and broader automated-test evidence is still pending.
-- 🟡 Phase 2 patient MVP: API-backed activities and reminders, patient/caregiver ownership models, emergency contacts, and UI loading/error/offline states. Durable offline writes and reconnect synchronization are still Phase 5 work.
-- 🟡 Phase 3 performance and personalization: persisted activity metrics, recent-history difficulty adjustment, Android next-level updates, and caregiver performance chart data. Route-level API tests and independent PostgreSQL/dashboard verification are still pending.
-- ✅ Phase 4 voice and language: `SpeechProvider` interface with `MockSpeechProvider` / `AndroidSpeechProvider` / `BHASHINISpeechProvider` / `WhisperSpeechProvider` implementations; `LanguageConfig` registry (`bhashinSupported` field, Assamese/English/Hindi); `VoiceIntent` sealed hierarchy with deterministic `IntentParser`; `VoiceListeningScreen` with mic button, animated waveform, transcript, intent routing, BHASHINI capability pill, and touch equivalents; language card on Home/Profile/dashboard; `GET /language-config` endpoint with `bhashinSupported` field; and Assamese TTS fallback. Runtime provider capability checks, real audio capture for BHASHINI, Assamese TTS, and Android build validation are still pending.
-- 🟡 Phase 6 safety support: persistent safety settings, emergency contacts, location updates, SOS caregiver workflow events, acknowledgement APIs, last-known-location labeling, safe-zone exit alerts, late-return alerts, and prototype primary-to-secondary escalation are implemented. Durable offline safety queues, real push/SMS delivery, route-level tests, and migration coverage are still pending.
+- 🟡 Phase 1 foundation: Android prototype, caregiver dashboard, FastAPI service, authentication, persistence, production JWT/CORS configuration, logout revocation, Alembic initial migration, and backend smoke coverage are implemented. Android Gradle build evidence and broader dashboard/Android automated tests remain.
+- 🟡 Phase 2 patient MVP: API-backed activities/reminders, ownership checks, Room-backed profile/activity/reminder/history/contact/safety caches, idempotent `/sync/events`, offline queueing, and reconnect scheduling are implemented. Android UI tests and end-to-end emulator verification remain.
+- 🟡 Phase 3 performance and personalization: persisted metrics, recent-history difficulty adjustment, next-level updates, truthful dashboard performance states, and sync/activity tests are implemented. Dedicated performance-route tests, PostgreSQL verification, and persisted next-difficulty hydration remain.
+- 🟡 Phase 4 voice and language: provider abstractions, runtime provider selection, microphone permission flow, capability-aware voice UI, deterministic intents, language registry, and Assamese fallback are implemented. Real BHASHINI audio capture, Assamese TTS probing/integration, provider credentials, and Android build validation remain.
+- 🟡 Phase 6 safety support: safety APIs, Android safety actions, Room-backed offline SOS/location queueing, browser geolocation, dashboard error states, migrations, route tests, freshness labels, safe-zone/late-return checks, and prototype escalation are implemented. Background escalation scheduling and real SMS/WhatsApp/push/website delivery remain.
+- 🟡 Phase 7 caregiver dashboard: typed API client with refresh/logout handling, URL-backed patient-preserving navigation, modular auth/bootstrap/layout/API/type/page/hook/UI modules, assigned-patient selection, patient profile, activities, alerts, report filters/series, location history/settings, safety views, caregiver profile settings, password management, and emergency-contact CRUD are implemented. Frontend automated tests and full backend report/history authorization coverage remain.
 
 ### Remaining
 
-- ⏳ Phase 5: Room-backed offline entities, idempotent sync queue, queued activity/safety events, and reconnect synchronization.
-- ⏳ Phase 7: complete caregiver routes, protected dashboard data flows beyond the safety/overview prototype, and patient reports.
+- 🟡 Phase 5: Room structured caches, pending-event storage, WorkManager reconnect scheduling, server conflict policy, and retry classification are implemented. End-to-end Android sync verification and full sync-state UI remain.
+- 🟡 Phase 7: core modular caregiver routes, protected dashboard data flows, patient-preserving nested routes, caregiver profile/password settings, and emergency-contact CRUD are implemented; frontend automated tests and broader reporting/history verification remain.
 - ⏳ Phase 8: comprehensive API/auth/sync/UI tests, accessibility review, environment/security review, demo script, and limitations documentation.
 
-Immediate next step: add durable offline sync for activity and safety events while closing the Phase 1–4 and Phase 6 validation gaps, then complete end-to-end automated tests and a production-readiness review.
+Immediate next step: finish modular patient subroutes/settings and frontend tests, then run Android/PostgreSQL verification and the remaining accessibility/security review.
 
-Phase 1 core foundation is implemented; build and broader automated verification remain:
+Phase 1 core foundation is implemented; backend/frontend verification and migration smoke checks pass, while Android build verification remains environment-dependent:
 
 - Android Jetpack Compose patient-app scaffold with home screen and persistent navigation
 - React caregiver dashboard shell with responsive layout and authentication screen
@@ -38,7 +39,7 @@ Phase 1 core foundation is implemented; build and broader automated verification
 - Deterministic adaptive-difficulty service
 - Project documentation, Docker PostgreSQL service, environment template, MIT license, and Git repository setup
 
-Phase 2 core patient flows are implemented; durable offline synchronization remains in Phase 5:
+Phase 2 core patient flows and durable offline synchronization are implemented; Android UI and end-to-end emulator verification remain:
 
 - Patient Activities, Reminders, Safety, and Profile navigation destinations are implemented as Android prototype screens.
 - Memory Match and Remember the Objects are playable, with large controls, progress, completion feedback, attempts, and response-time display.
@@ -48,7 +49,7 @@ Phase 2 core patient flows are implemented; durable offline synchronization rema
 - Android screens show loading, empty, error, offline, and sync status states; emulator API traffic uses `10.0.2.2:8000`.
 - Patient, caregiver, caregiver-patient assignment, and emergency-contact models are persisted with patient ownership checks on patient-scoped routes.
 
-## Phase 2 — Patient MVP 🟡 Core implementation present; offline completion pending
+## Phase 2 — Patient MVP 🟡 Core implementation present; offline completion queued
 
 Goal: deliver the essential elderly-user experience with simple, usable activity and reminder flows.
 
@@ -64,7 +65,7 @@ Exit criteria:
 - ✅ A patient can see today’s reminders without navigating a complex interface.
 - No activity or UI describes a score as medical information.
 
-## Phase 3 — Performance and personalization 🟡 Core implementation present; verification pending
+## Phase 3 — Performance and personalization 🟡 Core implementation present; route and PostgreSQL verification pending
 
 Goal: use activity data to choose an appropriate next activity level.
 
@@ -80,37 +81,40 @@ Exit criteria:
 - ✅ The system lowers difficulty after consistently low completion/performance and raises it after consistently strong performance.
 - ✅ Dashboard labels use “Activity Performance” and “Engagement Trend,” never clinical labels.
 
-## Phase 4 — Voice and language 🟡 Core implementation present; provider integration pending
+## Phase 4 — Voice and language 🟡 Core implementation present; audio/TTS integration pending
 
 Goal: make core interactions usable by speaking naturally to a nearby phone.
 
-1. Define `SpeechProvider`, `MockSpeechProvider`, `WhisperSpeechProvider`, and `BHASHINISpeechProvider` interfaces.
-2. Add a listening screen with a large microphone, waveform, transcript, Speak Again, and Continue actions.
-3. Add intent handling for starting activities, hearing reminders, and requesting help.
-4. Create shared language configuration: `languageCode`, `languageName`, `speechSupported`, and `ttsSupported`.
-5. Support Assamese first; show a clear fallback when speech or TTS is unavailable for a selected language.
+1. ✅ Define `SpeechProvider`, `MockSpeechProvider`, `WhisperSpeechProvider`, and `BHASHINISpeechProvider` interfaces.
+2. ✅ Add a listening screen with a large microphone, waveform, transcript, Speak Again, and Continue actions.
+3. ✅ Add intent handling for starting activities, hearing reminders, and requesting help.
+4. ✅ Create shared language configuration: `languageCode`, `languageName`, `speechSupported`, and `ttsSupported`.
+5. ✅ Support Assamese first; show a clear fallback when speech or TTS is unavailable for a selected language.
 
 Exit criteria:
 
 - The app never claims speech support for a language that the selected provider cannot support.
 - Voice controls have an equivalent large touch action.
 
-## Phase 5 — Offline-first support
+## Phase 5 — Offline-first support 🟡 Queue, structured cache, conflict handling, and reconnect scheduling implemented; verification pending
 
 Goal: keep core patient support working when connectivity is unavailable.
 
-1. Add Room entities for profile, reminders, activity sessions, emergency contacts, and sync events.
-2. Create an idempotent event queue using unique event IDs.
-3. Queue activity completions and safety updates while offline.
-4. Sync queued events through `POST /sync/events` when a connection returns.
-5. Show “Working Offline,” “Syncing your data…,” and “Synced successfully” states.
+1. ✅ Add Room-backed pending sync storage with migration-safe failure states and structured profile/reminder/history/contact/safety caches.
+2. ✅ Create an idempotent event queue using unique event IDs.
+3. ✅ Queue activity completions, reminder updates, location updates, and SOS events while offline.
+4. ✅ Sync queued events through `POST /sync/events` when the app refreshes after connectivity returns.
+5. ✅ Add WorkManager reconnect scheduling with network constraints and retry classification; complete syncing-state presentation remains.
 
 Exit criteria:
 
-- Activities, local history, reminders, and emergency contacts work without backend availability.
-- Repeated synchronization never creates duplicate activity events.
+- Activity/reminder/SOS/location writes survive backend outages in the Room queue.
+- Repeated synchronization never creates duplicate activity events or safety events.
+- Stale location uploads are rejected as conflicts rather than replacing newer data.
+- Cached profile, activities, reminders, history, contacts, and safety state remain available after a process restart without backend access.
+- Full sync-state presentation and Android end-to-end verification remain.
 
-## Phase 6 — Safety support 🟡 Core implementation present; delivery and verification pending
+## Phase 6 — Safety support 🟡 Core implementation present; delivery and background verification pending
 
 Goal: provide transparent, permission-aware caregiver safety support.
 
@@ -128,20 +132,20 @@ Exit criteria:
 
 Remaining validation and production gaps:
 
-- Add API route tests for SOS creation, acknowledgement, safe-zone exit alerts, late-return alerts, and escalation.
-- Persist schema changes through migrations before PostgreSQL deployment.
-- Connect real delivery channels for caregiver notification; current escalation is API-visible prototype state.
-- Queue location and SOS events locally in the Android app while offline as part of Phase 5.
+- Add route tests for safe-zone exit, late-return, and escalation authorization paths.
+- Run the initial Alembic migration against PostgreSQL and add schema evolution migrations as models change.
+- Connect real SMS, WhatsApp, app-push, and website delivery channels; current escalation remains API-visible prototype state.
+- Add a background worker so safety evaluation does not depend on incidental API requests.
 
 ## Phase 7 — Caregiver dashboard completion
 
 Goal: make caregiver tasks fast, clear, and secure.
 
-1. Implement patient list, patient profile, activities, alerts, location, reports, and settings routes.
-2. Connect dashboard widgets to protected FastAPI APIs.
-3. Enforce caregiver-patient assignment checks for every patient-specific API.
-4. Add alert priority hierarchy: routine, medium, high, and critical.
-5. Add simple reports for activity completion, accuracy, response time, performance trend, and difficulty progression.
+1. ✅ Implement modular patient list, patient profile, activities, alerts, location, reports, and settings routes.
+2. ✅ Connect dashboard widgets and modular pages to protected FastAPI APIs.
+3. ✅ Enforce caregiver-patient assignment checks on current patient-specific APIs.
+4. 🟡 Add separate alert severity and escalation-priority presentation across all alert views.
+5. ✅ Add activity report data for completion, accuracy, response time, performance trend, and difficulty progression.
 
 Exit criteria:
 
@@ -171,11 +175,11 @@ Exit criteria:
 
 1. Patient activities and session persistence
 2. Reminder APIs and Android reminder screens
-3. Caregiver patient/profile/activity routes
+3. Caregiver patient/profile/activity routes and modular dashboard extraction
 4. Offline queue and sync events
 5. Voice provider abstraction and Assamese prototype flow
 6. SOS, contacts, location, and safe zones
-7. Tests, accessibility, and demo polish
+7. Frontend tests, accessibility, and demo polish
 
 ## Definition of done
 

@@ -1,0 +1,3 @@
+export function LoadingState({label = 'Loading data…'}: {label?: string}) { return <p className="empty" role="status">{label}</p> }
+export function ErrorState({message, onRetry}: {message: string; onRetry?: () => void}) { return <div className="auth-error" role="alert">{message}{onRetry && <button className="quiet" onClick={onRetry}>Retry</button>}</div> }
+export function EmptyState({message}: {message: string}) { return <p className="empty">{message}</p> }
