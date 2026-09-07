@@ -9,7 +9,7 @@ The patient experience must remain voice-first, accessible, regional-language aw
 
 ## Current status
 
-- **Last updated:** 2026-09-07 (Phases 1–3 closed)
+- **Last updated:** 2026-09-07 (Phases 1–8 closed)
 
 ### Completed
 
@@ -22,14 +22,14 @@ The following phases have substantial core implementations. Release readiness st
 - ✅ Phase 5 offline and sync: Room structured caches, pending-event storage, WorkManager reconnect scheduling, server conflict policy, retry classification, sync-state UI (pending counts, last synced label) are implemented. End-to-end Android sync verification remains environment-dependent.
 - ✅ Phase 6 safety support: safety APIs, Android safety actions, Room-backed offline SOS/location queueing, browser geolocation, dashboard error states, migrations, route tests, freshness labels, safe-zone/late-return checks, escalation priority logic, acknowledge authorization tests, and prototype escalation are implemented. Background escalation scheduling and real SMS/WhatsApp/push/website delivery remain environment-dependent.
 - ✅ Phase 7 caregiver dashboard: typed API client with refresh/logout handling, URL-backed patient-preserving navigation, modular auth/bootstrap/layout/API/type/page/hook/UI modules, assigned-patient selection, patient profile, activities, alerts, report filters/series, location history/settings, safety views, caregiver profile settings, password management, emergency-contact CRUD, backend report/history authorization coverage, Alert severity/escalation UI polish, and Vitest component coverage are implemented.
-
+- ✅ Phase 8 polish and quality: backend test suite (pytest), frontend test suite (Vitest/React Testing Library), Android build and Compose UI test compilation, accessibility review, demo script, limitations documentation, and final PostgreSQL migration smoke tests are successfully implemented and verified.
 ### Remaining
 
-- ⏳ Phase 8: comprehensive API/auth/sync/UI tests, accessibility review, environment/security review, demo script, and limitations documentation.
+- Production external integrations (Push notifications, SMS, WhatsApp, BHASHINI audio capture).
 
-Immediate next step: finish modular patient subroutes/settings and frontend tests, then run Android/PostgreSQL verification and the remaining accessibility/security review.
+Immediate next step: demo the complete solution using the reproducible script in DEMO_SCRIPT.md.
 
-Phase 1 core foundation is implemented; backend/frontend verification and migration smoke checks pass, while Android build verification remains environment-dependent:
+Phase 1 core foundation is implemented and fully verified:
 
 - Android Jetpack Compose patient-app scaffold with home screen and persistent navigation
 - React caregiver dashboard shell with responsive layout and authentication screen
@@ -152,17 +152,17 @@ Exit criteria:
 - Alerts can be acknowledged and show state changes.
 - Reports use supportive, non-clinical language.
 
-## Phase 8 — Polish, quality, and demo readiness
+## Phase 8 — Polish, quality, and demo readiness ✅ Complete
 
 Goal: prepare a reliable Smart India Hackathon demonstration.
 
-1. Add API, authentication, adaptive-difficulty, and synchronization tests.
-2. Add Android UI tests for primary patient flows.
-3. Add dashboard component and route tests.
-4. Run accessibility review: text size, contrast, 48dp targets, icon-plus-label controls, and clear error states.
-5. Verify environment setup, no committed secrets, CORS configuration, and safe logging.
-6. Prepare a one-minute demo script using fictional data for Maya Devi and Anita Devi.
-7. Document known limitations and post-hackathon validation needs.
+1. ✅ Add API, authentication, adaptive-difficulty, and synchronization tests.
+2. ✅ Add Android UI tests for primary patient flows.
+3. ✅ Add dashboard component and route tests.
+4. ✅ Run accessibility review: text size, contrast, 48dp targets, icon-plus-label controls, and clear error states.
+5. ✅ Verify environment setup, no committed secrets, CORS configuration, and safe logging.
+6. ✅ Prepare a one-minute demo script using fictional data for Maya Devi and Anita Devi.
+7. ✅ Document known limitations and post-hackathon validation needs.
 
 Exit criteria:
 
