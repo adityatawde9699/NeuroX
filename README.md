@@ -8,11 +8,12 @@ NeuroX is a voice-first cognitive support prototype for older adults living with
 
 | Area | Current MVP capability |
 | --- | --- |
-| Patient Android app | Elder-friendly Jetpack Compose home screen, persistent navigation, large voice/activity/reminder/safety controls |
-| Caregiver dashboard | Responsive React dashboard, caregiver sign-in, activity overview, alerts, safe-zone preview, and location status |
-| Backend | FastAPI APIs, JWT role authorization, local/password accounts, Google Identity sign-in, refresh-token rotation, demo data |
-| Personalization | Deterministic activity difficulty adjustment based on completion, accuracy, and response time |
-| Persistence | SQLAlchemy models with PostgreSQL configuration and SQLite local-development fallback |
+| Patient Android app | Elder-friendly Jetpack Compose home screen, persistent navigation, large voice/activity/reminder/safety controls; offline-first Room cache and WorkManager sync |
+| Caregiver dashboard | Modular React dashboard with patient list, profile, activities, alerts (severity + escalation priority), location history, reports, and settings routes |
+| Backend | FastAPI APIs, JWT role authorization, caregiver-patient ownership enforcement, local/password accounts, Google Identity sign-in, refresh-token rotation and revocation, demo data |
+| Personalization | Deterministic activity difficulty adjustment based on recent completion, accuracy, and response time history |
+| Persistence | SQLAlchemy models with PostgreSQL configuration and SQLite local-development fallback; Alembic migrations |
+| Tests | Backend pytest suite (auth, sync, safety, adaptive difficulty, smoke); web Vitest component suite (Alerts, Reports, Patients pages); Android Compose UI tests |
 
 ## Architecture
 
@@ -181,16 +182,52 @@ The dashboard sends Google’s ID credential to FastAPI. The backend verifies it
 
 ## Validation
 
+### Backend tests
+
 ```bash
-cd web/caregiver-dashboard && npm run build
-cd ../../backend && python -m pip install -r requirements-dev.txt
-python -m pytest -q
-python -m compileall -q app tests
-# Apply schema migrations before staging or production startup.
+cd backend
+python -m venv .venv
+# Linux/macOS
+source .venv/bin/activate
+# Windows PowerShell
+# .\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements-dev.txt
+python -m pytest -v
+```
+
+### Web dashboard tests
+
+```bash
+cd web/caregiver-dashboard
+npm install
+npm run test          # runs Vitest in CI mode
+npm run build         # verifies TypeScript compiles and Vite bundles
+```
+
+### Android build and UI tests
+
+```bash
+cd android/NeuroX
+# Build debug APK (requires Android SDK)
+./gradlew assembleDebug
+# Run Compose UI tests on a connected device or emulator
+./gradlew connectedAndroidTest
+```
+
+### Schema migrations
+
+```bash
+cd backend
 alembic upgrade head
 ```
 
+## Demo
+
+See [DEMO_SCRIPT.md](DEMO_SCRIPT.md) for the one-minute Smart India Hackathon demo flow using fictional data (Maya Devi and Anita Devi).
+
 ## Product limitations
+
+See [LIMITATIONS.md](LIMITATIONS.md) for a full list of known constraints, prototype-only features, and post-hackathon validation priorities.
 
 - Location is last-known-location information and depends on permission, device availability, GPS accuracy, and network connectivity.
 - SOS is a caregiver notification workflow in this prototype, not an emergency-service integration.

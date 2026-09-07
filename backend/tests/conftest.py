@@ -10,6 +10,7 @@ fixture and tmp file cleanup.  This conftest simply guarantees that the env var
 is always set to a valid path before the first import happens.
 """
 import os
+import tempfile
 from pathlib import Path
 from uuid import uuid4
 
@@ -17,5 +18,6 @@ from uuid import uuid4
 # Individual test modules that need isolation may override this inside
 # their own module-level setup block.
 if "DATABASE_URL" not in os.environ:
-    _session_db = Path("/tmp") / f"neurox-session-{uuid4().hex}.sqlite3"
+    _tmp = Path(tempfile.gettempdir())
+    _session_db = _tmp / f"neurox-session-{uuid4().hex}.sqlite3"
     os.environ["DATABASE_URL"] = f"sqlite:///{_session_db}"

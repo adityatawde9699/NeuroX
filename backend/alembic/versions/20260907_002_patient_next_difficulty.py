@@ -10,10 +10,16 @@ depends_on = None
 
 
 def upgrade() -> None:
-    with op.batch_alter_table("patients") as batch_op:
-        batch_op.add_column(
-            sa.Column("next_difficulty", sa.Integer(), nullable=False, server_default="2")
-        )
+    try:
+        with op.batch_alter_table("patients") as batch_op:
+            batch_op.add_column(
+                sa.Column("next_difficulty", sa.Integer(), nullable=False, server_default="2")
+            )
+    except Exception as e:
+        if "duplicate column" in str(e).lower():
+            pass
+        else:
+            raise
 
 
 def downgrade() -> None:
