@@ -32,6 +32,7 @@ class Patient(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
     age: Mapped[int] = mapped_column(Integer)
     preferred_language: Mapped[str] = mapped_column(String(80), default="Assamese")
+    next_difficulty: Mapped[int] = mapped_column(Integer, default=2)
 
 # CaregiverPatientAssignment model representing the relationship between caregivers and patients
 class CaregiverPatientAssignment(Base):

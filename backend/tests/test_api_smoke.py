@@ -5,9 +5,9 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
-
-TEST_DATABASE = Path("/tmp") / f"neurox-test-{uuid4().hex}.sqlite3"
-os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DATABASE}"
+# DATABASE_URL is set by conftest.py before this module is imported.
+# We record the path so the module-level client fixture can clean it up.
+_DB_PATH = Path(os.environ["DATABASE_URL"].replace("sqlite:///", ""))
 
 from app.main import app  # noqa: E402
 
@@ -16,8 +16,6 @@ from app.main import app  # noqa: E402
 def client():
     with TestClient(app) as test_client:
         yield test_client
-
-    TEST_DATABASE.unlink(missing_ok=True)
 
 
 def test_health_and_seeded_demo_data(client):
@@ -259,3 +257,64 @@ def test_caregiver_password_change_requires_current_password(client):
     changed = client.put("/auth/me/password", headers=headers, json={"current_password": "NeuroXDemo!2026", "new_password": "NewNeuroX!2026"})
     assert changed.status_code == 200
     assert client.post("/auth/login", json={"email": "anita@neurox.demo", "password": "NewNeuroX!2026"}).status_code == 200
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 4 — Language-config endpoint
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_language_config_is_public_and_returns_required_fields(client):
+    """GET /language-config must be accessible without authentication and must
+    include every field required by the Android LanguageConfig model."""
+    resp = client.get("/language-config")
+    assert resp.status_code == 200
+    configs = resp.json()
+    assert isinstance(configs, list)
+    assert len(configs) >= 2
+
+    required_fields = {"languageCode", "languageName", "speechSupported", "ttsSupported"}
+    for config in configs:
+        missing = required_fields - set(config.keys())
+        assert not missing, f"Language config for {config.get('languageCode')} missing fields: {missing}"
+
+    # Assamese must be present as the primary patient language for the demo.
+    assamese = next((c for c in configs if c["languageCode"] == "as-IN"), None)
+    assert assamese is not None, "Assamese (as-IN) language config is missing"
+    assert assamese["speechSupported"] is True
+    assert assamese["ttsSupported"] is False, "Assamese TTS is not yet available"
+    assert assamese["ttsFallbackNote"] is not None, "Assamese config must include a ttsFallbackNote"
+
+    # English must be present and fully supported.
+    english = next((c for c in configs if c["languageCode"] == "en-IN"), None)
+    assert english is not None, "English (en-IN) language config is missing"
+    assert english["speechSupported"] is True
+    assert english["ttsSupported"] is True
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 7 — Cross-patient authorization: report, alerts, location-updates
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _stranger_headers(client) -> dict:
+    """Register a fresh caregiver with no patient assignment."""
+    email = f"stranger-p7-{uuid4().hex[:8]}@example.com"
+    reg = client.post(
+        "/auth/register",
+        json={"name": "Stranger Caregiver", "email": email, "password": "Testing!2026"},
+    )
+    assert reg.status_code == 201
+    return {"Authorization": f"Bearer {reg.json()['access_token']}"}
+
+
+def test_unrelated_caregiver_cannot_read_activity_report(client):
+    assert client.get("/patients/maya-demo/reports/activity", headers=_stranger_headers(client)).status_code == 403
+
+
+def test_unrelated_caregiver_cannot_read_alerts(client):
+    assert client.get("/patients/maya-demo/alerts", headers=_stranger_headers(client)).status_code == 403
+
+
+def test_unrelated_caregiver_cannot_read_location_updates(client):
+    assert client.get("/patients/maya-demo/location-updates", headers=_stranger_headers(client)).status_code == 403

@@ -1,6 +1,7 @@
 # ===================================
 #  Imports
 # ===================================
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from math import asin, cos, radians, sin, sqrt
 import os
@@ -61,51 +62,11 @@ from app.schemas import (
 from app.services.google_auth import verify_google_credential
 
 # ===================================
-#  API Application
+#  Application lifespan & seed data
 # ===================================
 
-app = FastAPI(
-    title="NeuroX API",
-    version="0.3.0",
-    description="Supportive engagement APIs — not clinical diagnosis.",
-)
-cors_origins = [
-    origin.strip()
-    for origin in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
-    if origin.strip()
-]
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=cors_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-ACTIVITIES = [
-    {
-        "id": "memory-match",
-        "title": "Memory Match",
-        "description": "Match two familiar objects.",
-        "difficulty": 2,
-    },
-    {
-        "id": "object-recall",
-        "title": "Remember the Objects",
-        "description": "Look, listen, then remember.",
-        "difficulty": 2,
-    },
-    {
-        "id": "pattern",
-        "title": "Pattern Completion",
-        "description": "Choose what comes next.",
-        "difficulty": 2,
-    },
-]
-
-
-@app.on_event("startup")
-def initialise_database():
+def _seed_database() -> None:
+    """Idempotent seed for demo data; runs once at startup."""
     if os.getenv("APP_ENV", "development").lower() == "development":
         Base.metadata.create_all(bind=engine)
     with Session(bind=engine) as db:
@@ -215,6 +176,58 @@ def initialise_database():
         db.commit()
 
 
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    _seed_database()
+    yield
+
+
+# ===================================
+#  API Application
+# ===================================
+
+app = FastAPI(
+    title="NeuroX API",
+    version="0.3.0",
+    description="Supportive engagement APIs — not clinical diagnosis.",
+    lifespan=lifespan,
+)
+cors_origins = [
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
+    if origin.strip()
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+ACTIVITIES = [
+    {
+        "id": "memory-match",
+        "title": "Memory Match",
+        "description": "Match two familiar objects.",
+        "difficulty": 2,
+    },
+    {
+        "id": "object-recall",
+        "title": "Remember the Objects",
+        "description": "Look, listen, then remember.",
+        "difficulty": 2,
+    },
+    {
+        "id": "pattern",
+        "title": "Pattern Completion",
+        "description": "Choose what comes next.",
+        "difficulty": 2,
+    },
+]
+
+
+
 # ===================================
 #  Getter
 # ===================================
@@ -246,6 +259,7 @@ def public_patient(patient: Patient, user: User) -> dict:
         "email": user.email,
         "age": patient.age,
         "preferredLanguage": patient.preferred_language,
+        "nextDifficulty": patient.next_difficulty,
     }
 
 
@@ -965,6 +979,12 @@ def complete_activity(
         for item in reversed(history_rows)
     ]
     next_level, score = recommend_from_history(current, history)
+    # Persist the recommended next difficulty so the Android app can hydrate it
+    # from the patient profile without re-computing on every launch.
+    patient_row = db.get(Patient, user.id)
+    if patient_row:
+        patient_row.next_difficulty = next_level
+        db.commit()
     return {
         "saved": True,
         "event_id": session.event_id,

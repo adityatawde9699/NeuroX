@@ -163,6 +163,10 @@ class NeuroXRepository(context: Context) {
         val rejected = rejectedResults.size
         return if (rejected > 0) SyncOutcome.Partial(completed.size, rejected) else SyncOutcome.Synced(completed.size)
     }
+    /** Returns the number of events currently waiting in the offline queue. */
+    suspend fun pendingEventCount(): Int = withContext(Dispatchers.IO) {
+        offlineDatabase.pendingSyncDao().getAll().size
+    }
     fun patientId(): String = preferences.getString("patient_id", "maya-demo") ?: "maya-demo"
 }
 

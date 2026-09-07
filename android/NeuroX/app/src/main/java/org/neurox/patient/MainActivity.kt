@@ -62,6 +62,10 @@ fun NeuroXApp() {
     var activeEventId by rememberSaveable { mutableStateOf<String?>(null) }
     var activeStartedAt by rememberSaveable { mutableStateOf<String?>(null) }
     var syncState by remember { mutableStateOf(SyncState.Loading) }
+    // Phase 5: pending-event count displayed in the offline banner.
+    var pendingCount by remember { mutableIntStateOf(0) }
+    // Phase 5: human-readable "last synced" label shown after a successful sync.
+    var lastSyncedLabel by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val repository = remember { NeuroXRepository(context) }
     val scope = rememberCoroutineScope()
@@ -87,6 +91,9 @@ fun NeuroXApp() {
                 safety = data.safety
                 patientName = data.patient.name
                 preferredLanguage = data.patient.preferredLanguage
+                // Phase 5: update pending count and last-synced label.
+                pendingCount = repository.pendingEventCount()
+                lastSyncedLabel = "just now"
                 syncState = SyncState.Synced
             } catch (_: IOException) {
                 repository.cachedData()?.let { data ->
@@ -96,6 +103,8 @@ fun NeuroXApp() {
                     patientName = data.patient.name
                     preferredLanguage = data.patient.preferredLanguage
                 }
+                // Phase 5: refresh pending count even when offline.
+                pendingCount = repository.pendingEventCount()
                 syncState = SyncState.Offline
             } catch (_: Exception) {
                 syncState = SyncState.Error
@@ -206,7 +215,7 @@ fun NeuroXApp() {
             }
         }) { padding ->
             Column(Modifier.padding(padding)) {
-                SyncBanner(syncState, onRetry = ::refresh)
+                SyncBanner(syncState, pendingCount = pendingCount, lastSyncedLabel = lastSyncedLabel, onRetry = ::refresh)
                 when {
                     activeActivity == "memory-match" -> MemoryMatch(
                         Modifier.weight(1f),
@@ -299,25 +308,34 @@ fun NeuroXApp() {
 }
 
 // ──────────────────────────────────────────────────────────────
-// Sync banner
+// Sync banner (Phase 5: pending count + last-synced label)
 // ──────────────────────────────────────────────────────────────
 
 @Composable
-private fun SyncBanner(state: SyncState, onRetry: () -> Unit) {
-    if (state == SyncState.Synced) return
-    Surface(color = if (state == SyncState.Offline) Color(0xFFFFF0ED) else Color(0xFFE8F0FF), modifier = Modifier.fillMaxWidth()) {
+private fun SyncBanner(
+    state: SyncState,
+    pendingCount: Int = 0,
+    lastSyncedLabel: String? = null,
+    onRetry: () -> Unit
+) {
+    // Synced state: show a brief confirmation label if available, then nothing.
+    if (state == SyncState.Synced && lastSyncedLabel == null) return
+    val (bg, message) = when (state) {
+        SyncState.Loading -> Color(0xFFE8F0FF) to "Loading your NeuroX data…"
+        SyncState.Synced  -> Color(0xFFE8F5EE) to "Synced · $lastSyncedLabel"
+        SyncState.Offline -> Color(0xFFFFF0ED) to (
+            if (pendingCount > 0)
+                "Working offline · $pendingCount item${if (pendingCount == 1) "" else "s"} saved — will sync when connected"
+            else
+                "Working offline · Showing saved activities"
+        )
+        SyncState.Error   -> Color(0xFFFFF0ED) to "Could not sync your data"
+    }
+    Surface(color = bg, modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                when (state) {
-                    SyncState.Loading -> "Loading your NeuroX data…"
-                    SyncState.Offline -> "Working Offline · Showing saved activities"
-                    SyncState.Error   -> "Could not sync your data"
-                    SyncState.Synced  -> ""
-                },
-                modifier = Modifier.weight(1f),
-                color = Ink
-            )
-            if (state != SyncState.Loading) TextButton(onClick = onRetry) { Text("Retry") }
+            Text(message, modifier = Modifier.weight(1f), color = Ink)
+            if (state != SyncState.Loading && state != SyncState.Synced)
+                TextButton(onClick = onRetry) { Text("Retry") }
         }
     }
 }
