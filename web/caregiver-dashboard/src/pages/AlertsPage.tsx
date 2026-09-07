@@ -78,15 +78,15 @@ export function AlertsPage({ patientId }: { patientId?: string }) {
                 <b>{alert.kind === 'sos' ? 'SOS caregiver workflow' : alert.type ?? 'Safety alert'}</b>
                 <p>{alert.message}</p>
                 {/* Phase 7: escalation priority indicator */}
-                {alert.escalatedToPriority > 1 && (
+                {alert.escalatedToPriority > 1 && alert.workflowNote && (
                   <p className="escalation-note">
-                    Escalated to priority {alert.escalatedToPriority}
-                    {alert.workflowNote ? ` · ${alert.workflowNote}` : ''}
+                    Escalation note: {alert.workflowNote}
                   </p>
                 )}
               </div>
               <div className="alert-tags">
-                <SeverityBadge severity={alert.severity} />
+                {alert.kind === 'sos' ? <span className="tag red">Critical</span> : <SeverityBadge severity={alert.severity} />}
+                <span className="tag purple">P{alert.escalatedToPriority}</span>
                 <span className={`tag ${alert.status === 'open' ? 'orange' : 'muted'}`}>
                   {alert.status}
                 </span>

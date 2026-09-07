@@ -143,7 +143,7 @@ Goal: make caregiver tasks fast, clear, and secure.
 1. ✅ Implement modular patient list, patient profile, activities, alerts, location, reports, and settings routes.
 2. ✅ Connect dashboard widgets and modular pages to protected FastAPI APIs.
 3. ✅ Enforce caregiver-patient assignment checks on current patient-specific APIs.
-4. 🟡 Add separate alert severity and escalation-priority presentation across all alert views.
+4. ✅ Add separate alert severity and escalation-priority presentation across all alert views.
 5. ✅ Add activity report data for completion, accuracy, response time, performance trend, and difficulty progression.
 
 Exit criteria:
