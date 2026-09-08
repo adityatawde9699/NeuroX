@@ -203,8 +203,10 @@ class BHASHINISpeechProvider(
     /** BCP-47 codes for languages BHASHINI Ulca can reliably transcribe. */
     private val supportedLanguageCodes = setOf(
         "as-IN",  // Assamese — primary target for NeuroX Assamese patients
-        "bn-IN",  // Bengali
+        "brx-IN", // Bodo
+        "mni-IN", // Manipuri
         "hi-IN",  // Hindi
+        "bn-IN",  // Bengali
         "gu-IN",  // Gujarati
         "kn-IN",  // Kannada
         "ml-IN",  // Malayalam
