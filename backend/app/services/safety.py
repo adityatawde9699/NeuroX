@@ -33,9 +33,14 @@ from app.services.safety_state import (
 def location_history(
     patient_id: str,
     limit: int = Query(default=50, ge=1, le=100),
-    _: User = Depends(patient_access),
+    user: User = Depends(patient_access),
     db: Session = Depends(get_db),
 ):
+    settings = db.get(SafetySettings, patient_id)
+    if user.id != patient_id and (
+        not settings or not settings.location_sharing_enabled
+    ):
+        return []
     locations = (
         db.query(LocationUpdate)
         .filter_by(patient_id=patient_id)
@@ -48,7 +53,7 @@ def location_history(
 
 # Get a patient's safety status
 def safety(
-    patient_id: str, _: User = Depends(patient_access), db: Session = Depends(get_db)
+    patient_id: str, user: User = Depends(patient_access), db: Session = Depends(get_db)
 ):
     evaluate_safety(patient_id, db)
     location = latest_location(patient_id, db)
@@ -66,6 +71,10 @@ def safety(
         .all()
     )
     location_data = public_location(location)
+    if user.id != patient_id and (
+        not settings or not settings.location_sharing_enabled
+    ):
+        location_data = None
     status_text = (
         "Needs acknowledgement" if alerts or sos_events else "No open safety alerts"
     )
@@ -114,6 +123,16 @@ def create_location_update(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ):
+    if user.id != patient_id:
+        raise HTTPException(
+            status_code=403, detail="Only the patient can share a new location."
+        )
+    settings = db.get(SafetySettings, patient_id)
+    if not settings or not settings.location_sharing_enabled:
+        raise HTTPException(
+            status_code=403,
+            detail="Location sharing is off. Turn it on before sharing a location.",
+        )
     if not can_access_patient(user, patient_id, db):
         raise HTTPException(
             status_code=403, detail="You are not assigned to this patient."

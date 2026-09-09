@@ -34,6 +34,12 @@ router.add_api_route(
     dependencies=[Depends(service.browser_origin)],
 )
 router.add_api_route(
+    "/auth/browser/register",
+    service.browser_register,
+    methods=["POST"],
+    dependencies=[Depends(service.browser_origin)],
+)
+router.add_api_route(
     "/auth/browser/google",
     service.browser_google,
     methods=["POST"],

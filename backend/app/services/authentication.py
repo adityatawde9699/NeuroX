@@ -232,6 +232,13 @@ def browser_login(
     return browser_session(login(body, db), response)
 
 
+def browser_register(
+    body: RegisterRequest, response: Response, db: Session = Depends(get_db)
+):
+    """Create a public account and establish the protected browser session."""
+    return browser_session(register(body, db), response)
+
+
 def browser_google(
     body: GoogleLoginRequest, response: Response, db: Session = Depends(get_db)
 ):

@@ -97,6 +97,11 @@ def test_safe_zone_exit_alert_created_for_out_of_range_location(client):
         headers=geo_headers,
         json={"safe_zone_name": "Home", "safe_zone_latitude": 26.1445, "safe_zone_longitude": 91.7362, "safe_zone_radius_m": 250},
     )
+    client.put(
+        f"/patients/me/privacy/location-sharing",
+        headers=geo_headers,
+        json={"enabled": True},
+    )
     # Post a location ~10 km away — clearly outside 250 m.
     resp = client.post(
         f"/patients/{geo_id}/location-updates",

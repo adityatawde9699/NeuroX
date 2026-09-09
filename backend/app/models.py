@@ -7,9 +7,11 @@ from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, Stri
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 
+
 # Get current UTC time
 def now() -> datetime:
     return datetime.now(timezone.utc)
+
 
 # User model representing users in the system
 class User(Base):
@@ -26,6 +28,7 @@ class User(Base):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
+
 # Patient model representing patients in the system
 class Patient(Base):
     __tablename__ = "patients"
@@ -34,6 +37,7 @@ class Patient(Base):
     preferred_language: Mapped[str] = mapped_column(String(80), default="Assamese")
     next_difficulty: Mapped[int] = mapped_column(Integer, default=2)
 
+
 # CaregiverPatientAssignment model representing the relationship between caregivers and patients
 class CaregiverPatientAssignment(Base):
     __tablename__ = "caregiver_patient_assignments"
@@ -41,6 +45,7 @@ class CaregiverPatientAssignment(Base):
     patient_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
 
 # EmergencyContact model representing emergency contacts for patients
 class EmergencyContact(Base):
@@ -55,6 +60,7 @@ class EmergencyContact(Base):
     priority: Mapped[int] = mapped_column(Integer, default=1)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
 
+
 # SafetySettings model representing patient safety preferences
 class SafetySettings(Base):
     __tablename__ = "safety_settings"
@@ -68,7 +74,9 @@ class SafetySettings(Base):
     )
     expected_return_note: Mapped[str | None] = mapped_column(String(160), nullable=True)
     late_return_grace_minutes: Mapped[int] = mapped_column(Integer, default=10)
+    location_sharing_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
 
 # LocationUpdate model representing patient location reports
 class LocationUpdate(Base):
@@ -83,6 +91,7 @@ class LocationUpdate(Base):
     connection_state: Mapped[str] = mapped_column(String(24), default="online")
     captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
 
 # SafetyAlert model representing caregiver safety workflows
 class SafetyAlert(Base):
@@ -109,6 +118,7 @@ class SafetyAlert(Base):
     location_update_id: Mapped[str | None] = mapped_column(
         ForeignKey("location_updates.id"), nullable=True
     )
+
 
 # SOSEvent model representing patient-triggered help requests
 class SOSEvent(Base):
@@ -137,6 +147,7 @@ class SOSEvent(Base):
         ForeignKey("location_updates.id"), nullable=True
     )
 
+
 # RefreshSession model representing refresh token sessions for users
 class RefreshSession(Base):
     __tablename__ = "refresh_sessions"
@@ -144,6 +155,7 @@ class RefreshSession(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     revoked: Mapped[bool] = mapped_column(Boolean, default=False)
+
 
 # ActivitySession model representing activity sessions for patients
 class ActivitySession(Base):
@@ -165,6 +177,7 @@ class ActivitySession(Base):
     difficulty_level: Mapped[int] = mapped_column(Integer)
     offline_created: Mapped[bool] = mapped_column(Boolean, default=False)
 
+
 # Reminder model representing reminders for patients
 class Reminder(Base):
     __tablename__ = "reminders"
@@ -180,6 +193,7 @@ class Reminder(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     completed: Mapped[bool] = mapped_column(Boolean, default=False)
 
+
 # SyncEvent model records client mutations so retries are idempotent.
 class SyncEvent(Base):
     __tablename__ = "sync_events"
@@ -192,3 +206,42 @@ class SyncEvent(Base):
     result: Mapped[dict] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     processed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class ConsentRecord(Base):
+    __tablename__ = "consent_records"
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    patient_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    purpose: Mapped[str] = mapped_column(String(48), index=True)
+    granted: Mapped[bool] = mapped_column(Boolean)
+    notice_version: Mapped[str] = mapped_column(String(32))
+    recorded_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class PrivacyRequest(Base):
+    __tablename__ = "privacy_requests"
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    patient_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    request_type: Mapped[str] = mapped_column(String(24))
+    status: Mapped[str] = mapped_column(String(24), default="submitted")
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class AuditEvent(Base):
+    __tablename__ = "audit_events"
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    patient_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True, index=True
+    )
+    actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    action: Mapped[str] = mapped_column(String(64))
+    target_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

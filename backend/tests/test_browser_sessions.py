@@ -39,10 +39,27 @@ def test_browser_cookie_rotation_and_logout(client):
     assert client.post("/auth/refresh", json={"refresh_token": current_token}).status_code == 401
 
 
+def test_browser_registration_creates_caregiver_cookie_session(client):
+    response = client.post(
+        "/auth/browser/register",
+        headers=ORIGIN,
+        json={
+            "name": "New Caregiver",
+            "email": f"new-caregiver-{uuid4().hex}@neurox.test",
+            "password": "BrowserTest!123",
+            "role": "CAREGIVER",
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["user"]["role"] == "CAREGIVER"
+    assert "refresh_token" not in response.json()
+    assert "HttpOnly" in response.headers["set-cookie"]
+
+
 @pytest.mark.parametrize("origin", [None, "https://untrusted.example", "null"])
 def test_browser_endpoints_require_trusted_origin(client, origin):
     headers = {"Origin": origin} if origin else {}
-    for endpoint in ("login", "google", "refresh", "logout"):
+    for endpoint in ("login", "register", "google", "refresh", "logout"):
         response = client.post(f"/auth/browser/{endpoint}", headers=headers, json={
             "email": "x@example.com", "password": "Password!123", "credential": "x" * 30,
         })

@@ -237,6 +237,15 @@ Security gates include Ruff, Bandit, pip-audit, npm audit, OSV scanning of the
 resolved Android release graph, and release credential/manifest checks.
 These checks have passed locally; remote CI must pass before Phase 0 is accepted.
 
+## Phase 1 privacy controls
+
+Patients can turn location sharing on or off, record or withdraw purpose-specific
+consent, revoke a caregiver's access immediately, download their data, and submit
+a deletion request. These controls are available through the patient privacy API
+and the patient web safety screen. A deletion request is deliberately not an
+automatic erasure: retention and legal-review rules must be approved before any
+irreversible deletion workflow is enabled.
+
 Use JDK 17 for the Android Gradle build. HTTP access to the emulator's local
 backend is permitted only in debug builds; release builds reject cleartext
 traffic. The Android setup/sign-in flow and encrypted session storage are

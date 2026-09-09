@@ -113,6 +113,7 @@ def _seed_database() -> None:
                     safe_zone_radius_m=250,
                     expected_return_at=datetime.now(timezone.utc) + timedelta(hours=2),
                     expected_return_note="Evening walk",
+                    location_sharing_enabled=True,
                 )
             )
         if not db.query(LocationUpdate).filter_by(patient_id="maya-demo").first():

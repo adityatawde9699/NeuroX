@@ -8,11 +8,18 @@ export type LocationHistoryItem = { id: string; latitude: number; longitude: num
 
 export const authApi = {
   login: (email: string, password: string) => api.post<AuthResponse>('/auth/browser/login', {email, password}),
+  register: (name: string, email: string, password: string) => api.post<AuthResponse>('/auth/browser/register', {name, email, password, role: 'CAREGIVER'}),
   google: (credential: string) => api.post<AuthResponse>('/auth/browser/google', {credential}),
   me: () => api.get<AuthUser>('/auth/me'),
   logout: endSession,
   updateProfile: (name: string) => api.put<AuthUser>('/auth/me', {name}),
   changePassword: (currentPassword: string, newPassword: string) => api.put<{updated: boolean}>('/auth/me/password', {current_password: currentPassword, new_password: newPassword}),
+  privacy: () => api.get<{locationSharingEnabled: boolean}>('/patients/me/privacy'),
+  setLocationSharing: (enabled: boolean) => api.put<{enabled: boolean; message: string}>('/patients/me/privacy/location-sharing', {enabled}),
+  caregivers: () => api.get<Array<{id: string; name: string; email: string}>>('/patients/me/caregivers'),
+  revokeCaregiver: (id: string) => api.delete(`/patients/me/caregivers/${id}`),
+  exportData: () => api.get('/patients/me/privacy/export'),
+  requestDeletion: () => api.post<{message: string}>('/patients/me/privacy/deletion-request', {}),
 }
 
 export const dashboardApi = {

@@ -50,6 +50,9 @@ EXPECTED_TABLES = {
     "activity_sessions",
     "reminders",
     "sync_events",
+    "consent_records",
+    "privacy_requests",
+    "audit_events",
 }
 
 

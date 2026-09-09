@@ -102,8 +102,8 @@ the existing production plan remains the source of priorities.
 
 ## Current verification
 
-- Backend: 112 tests pass, including authorization, sync, browser sessions,
-  migration history, JWT claims, and release security gates.
+- Backend: 114 tests pass, including Phase 1 consent, location-sharing,
+  caregiver-revocation, data-export, deletion-request, and audit-trail checks.
 - Dashboard: 35 tests pass; production build and TypeScript checks pass.
 - Android: 13 JVM tests pass; debug/release APKs and instrumentation APK compile.
   Lint has zero errors and 15 warnings.
@@ -128,3 +128,24 @@ Device/Keystore/UI instrumentation is compiled but not executed because this
 environment has no emulator/KVM. Full device workflows and process-death game
 recovery remain production-validation work; this update does not claim they are
 implemented or tested. The broader pilot/production gates in PLAN.md remain open.
+
+## Phase 1 implementation status
+
+- Patients can independently enable or stop location sharing. New location
+  submissions are rejected unless the signed-in patient has explicitly enabled
+  sharing; caregivers cannot submit a patient's location on their behalf.
+- Patients can record or withdraw versioned consent for location, voice
+  recording, caregiver access, notifications, and personalization. Consent,
+  location changes, caregiver revocation, export access, and deletion requests
+  create minimal audit events without copying sensitive data into audit metadata.
+- Patients can immediately revoke an active caregiver assignment; every
+  subsequent protected read or mutation by that caregiver is denied. The patient
+  web safety screen exposes location sharing, caregiver revocation, data export,
+  and deletion-request controls.
+- Data export is available as a browser-downloaded JSON record. Deletion requests
+  are deliberately recorded for review rather than automatically erasing data:
+  retention, legal review, and approved operational handling are still required.
+- Review-group formation, field research in NER communities, formal legal review,
+  approved retention/deletion policy, incident-response ownership, and an approved
+  pilot protocol require real people and external approval. They are not claimed
+  complete by this implementation.

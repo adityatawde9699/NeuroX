@@ -13,6 +13,7 @@ from app.routers.reports import router as reports_router
 from app.routers.notifications import router as notifications_router
 from app.routers.safety import router as safety_router
 from app.routers.sync import router as sync_router
+from app.routers.privacy import router as privacy_router
 
 
 @asynccontextmanager
@@ -41,6 +42,7 @@ app.include_router(reports_router)
 app.include_router(notifications_router)
 app.include_router(safety_router)
 app.include_router(sync_router)
+app.include_router(privacy_router)
 
 
 @app.get("/health")
