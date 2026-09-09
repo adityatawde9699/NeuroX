@@ -16,7 +16,7 @@ class SyncWorker(
     workerParams: WorkerParameters
 ) : CoroutineWorker(appContext, workerParams) {
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        when (val outcome = NeuroXRepository(applicationContext).syncPendingEvents()) {
+        when (val outcome = PatientDependencies.repository(applicationContext).syncPendingEvents()) {
             is SyncOutcome.Synced -> Result.success()
             is SyncOutcome.Partial -> Result.success()
             is SyncOutcome.Retry -> Result.retry()

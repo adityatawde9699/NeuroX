@@ -1,4 +1,4 @@
-import { api } from './client'
+import { api, endSession } from './client'
 import type { AuthResponse, AuthUser, Contact, LanguageConfig, Patient, PerformanceData, SafetyState } from '../types/dashboard'
 
 export type ActivityReport = { patientId: string; summary: { sessions: number; completionRate: number; averageAccuracy: number; averageResponseTime: number; averageDifficulty: number }; series: Array<{date: string; completionRate: number; accuracy: number; responseTime: number; difficulty: number}>; note: string }
@@ -7,9 +7,10 @@ export type DashboardAlert = { id: string; kind: string; type?: string; severity
 export type LocationHistoryItem = { id: string; latitude: number; longitude: number; accuracyM: number; connectionState: string; capturedAt: string; freshness: string; label: string }
 
 export const authApi = {
-  login: (email: string, password: string) => api.post<AuthResponse>('/auth/login', {email, password}),
+  login: (email: string, password: string) => api.post<AuthResponse>('/auth/browser/login', {email, password}),
+  google: (credential: string) => api.post<AuthResponse>('/auth/browser/google', {credential}),
   me: () => api.get<AuthUser>('/auth/me'),
-  logout: (refreshToken: string) => api.post<{loggedOut: boolean}>('/auth/logout', {refresh_token: refreshToken}),
+  logout: endSession,
   updateProfile: (name: string) => api.put<AuthUser>('/auth/me', {name}),
   changePassword: (currentPassword: string, newPassword: string) => api.put<{updated: boolean}>('/auth/me/password', {current_password: currentPassword, new_password: newPassword}),
 }

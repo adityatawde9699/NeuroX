@@ -82,6 +82,32 @@ def test_login_unknown_email_returns_401(client):
     assert resp.status_code == 401
 
 
+@pytest.mark.parametrize("role", ["ADMIN", "HEALTHCARE_WORKER", "admin", "UNKNOWN"])
+def test_public_registration_rejects_privileged_roles(client, role):
+    email = f"forbidden-{uuid4().hex}@neurox.test"
+    response = client.post("/auth/register", json={
+        "name": "Untrusted Registration", "email": email,
+        "password": _TEST_PASSWORD, "role": role,
+    })
+    assert response.status_code == 422
+    assert client.post("/auth/login", json={
+        "email": email, "password": _TEST_PASSWORD,
+    }).status_code == 401
+
+
+@pytest.mark.parametrize("role", ["PATIENT", "CAREGIVER"])
+def test_public_registration_accepts_supported_roles(client, role):
+    response = client.post("/auth/register", json={
+        "name": "Supported Registration", "email": f"allowed-{uuid4().hex}@neurox.test",
+        "password": _TEST_PASSWORD, "role": role,
+    })
+    assert response.status_code == 201
+    token = response.json()["access_token"]
+    assert client.get("/auth/me", headers={
+        "Authorization": f"Bearer {token}",
+    }).json()["role"] == role
+
+
 # -------------------------------------------------------
 # Protected endpoints
 # -------------------------------------------------------

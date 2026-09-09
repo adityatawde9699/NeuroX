@@ -1,11 +1,29 @@
 plugins { id("com.android.application"); id("org.jetbrains.kotlin.android"); id("org.jetbrains.kotlin.kapt"); id("org.jetbrains.kotlin.plugin.compose") }
 
 android { namespace = "org.neurox.patient"; compileSdk = 35
-    defaultConfig { applicationId = "org.neurox.patient"; minSdk = 26; targetSdk = 35; versionCode = 1; versionName = "0.1" }
-    buildFeatures { compose = true }
+    defaultConfig {
+        applicationId = "org.neurox.patient"
+        minSdk = 26
+        targetSdk = 35
+        versionCode = 1
+        versionName = "0.1"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+    buildFeatures { compose = true; buildConfig = true }
+    buildTypes {
+        debug { buildConfigField("String", "DEFAULT_API_URL", "\"http://10.0.2.2:8000/\"") }
+        release { buildConfigField("String", "DEFAULT_API_URL", "\"\"") }
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = "17" }
     testOptions { animationsDisabled = true }
 }
 dependencies {
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.activity:activity-compose:1.10.0")
@@ -25,5 +43,23 @@ dependencies {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+    androidTestImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+}
+
+// Scan the resolved release graph, including transitive Maven dependencies.
+tasks.register("exportReleaseDependencies") {
+    val report = layout.buildDirectory.file("reports/release-dependencies.json")
+    outputs.file(report)
+    doLast {
+        val packages = configurations.getByName("releaseRuntimeClasspath")
+            .incoming.resolutionResult.allComponents.mapNotNull { component ->
+                val id = component.id as? org.gradle.api.artifacts.component.ModuleComponentIdentifier
+                id?.let { mapOf("name" to "${it.group}:${it.module}", "version" to it.version) }
+            }.sortedBy { it["name"] }
+        report.get().asFile.apply {
+            parentFile.mkdirs()
+            writeText(groovy.json.JsonOutput.toJson(packages))
+        }
+    }
 }

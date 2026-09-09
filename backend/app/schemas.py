@@ -3,7 +3,7 @@
 # ===================================
 from datetime import datetime
 from enum import Enum
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # ===================================
 #  User Roles
@@ -26,6 +26,13 @@ class LoginRequest(BaseModel):
 class RegisterRequest(LoginRequest):
     name: str = Field(min_length=2, max_length=80)
     role: Role = Role.CAREGIVER
+
+    @field_validator("role")
+    @classmethod
+    def public_registration_role(cls, role: Role) -> Role:
+        if role not in {Role.PATIENT, Role.CAREGIVER}:
+            raise ValueError("Public registration supports patient and caregiver accounts only.")
+        return role
 
 # Sign in request using Google
 class GoogleLoginRequest(BaseModel):

@@ -1,5 +1,5 @@
 export type AuthUser = { id: string; name: string; email: string; role: string }
-export type AuthResponse = { access_token: string; refresh_token: string; user: AuthUser }
+export type AuthResponse = { access_token: string; user: AuthUser }
 export type Patient = { id: string; name: string; email: string; age: number; preferredLanguage: string }
 export type PerformanceData = { patientId: string; completion: number[]; accuracyScores: number[]; responseTimes: number[]; difficultyProgression: number[]; difficulty: number; sessions: number; note: string }
 export type LanguageConfig = { languageCode: string; languageName: string; speechSupported: boolean; ttsSupported: boolean; ttsFallbackNote: string | null; bhashinSupported: boolean; bhashinNote: string | null }

@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -155,7 +156,7 @@ def test_sync_persists_location_and_sos_events(client):
                     "longitude": 91.7364,
                     "accuracy_m": 18,
                     "connection_state": "offline",
-                    "captured_at": "2026-09-07T10:00:00Z",
+                    "captured_at": datetime.now(timezone.utc).isoformat(),
                 },
             },
             {

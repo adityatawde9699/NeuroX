@@ -7,8 +7,10 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from fastapi import HTTPException, status
-from jose import JWTError, jwt
+import jwt
+from jwt import InvalidTokenError
 from passlib.context import CryptContext
+from app.config import APP_ENV
 
 # ===================================
 #  Constants for JWT and password hashing
@@ -16,9 +18,8 @@ from passlib.context import CryptContext
 
 ALGORITHM = "HS256"
 JWT_SECRET = os.getenv("JWT_SECRET", "development-only-change-me")
-APP_ENV = os.getenv("APP_ENV", "development").lower()
 if APP_ENV in {"production", "staging"} and (
-    JWT_SECRET == "development-only-change-me" or len(JWT_SECRET) < 32
+    JWT_SECRET in {"development-only-change-me", "replace-with-a-long-random-secret"} or len(JWT_SECRET) < 32
 ):
     raise RuntimeError("JWT_SECRET must be a unique value of at least 32 characters outside development.")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
@@ -60,8 +61,9 @@ def create_refresh_token(user: Any, session_id: str) -> str:
 # Decoding Access Token to get user information
 def decode_access_token(token: str) -> dict[str, Any]:
     try:
-        return jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
-    except JWTError as exc:
+        return jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM],
+                          options={"require": ["sub", "exp", "type"]})
+    except InvalidTokenError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Your session is invalid or has expired.",

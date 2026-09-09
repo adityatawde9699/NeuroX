@@ -60,6 +60,8 @@ data class CachedSnapshotEntity(
 
 @Dao
 interface PendingSyncDao {
+    @Query("SELECT COUNT(*) FROM pending_sync_events")
+    suspend fun countAll(): Int
     @Query("SELECT * FROM pending_sync_events WHERE status = 'pending' ORDER BY createdAt ASC")
     suspend fun getAll(): List<PendingSyncEntity>
 

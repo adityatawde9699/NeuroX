@@ -1,134 +1,73 @@
 package org.neurox.patient
 
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/**
- * Phase 8 Compose UI tests for primary patient flows.
- *
- * These tests use a fake/demo data layer (no network calls) to verify
- * that the UI renders correctly and responds to user interactions.
- *
- * Coverage:
- *   - HomeScreen: tabs are visible with labels, patient name appears.
- *   - ActivitiesScreen: activity list items are tappable.
- *   - RemindersScreen: reminder cards are shown.
- *   - SafetyScreen: safety status section and action buttons are present.
- *   - Accessibility: all interactive elements have content descriptions.
- */
+/** Setup UI tests use explicit state and never connect to a real patient server. */
 @RunWith(AndroidJUnit4::class)
 class PatientFlowTest {
+    @get:Rule val composeTestRule = createComposeRule()
 
-    @get:Rule
-    val composeTestRule = createComposeRule()
-
-    // --------------------------------------------------------------
-    // Home / Navigation
-    // --------------------------------------------------------------
-
-    @Test
-    fun homeScreen_displaysNavigationTabsWithLabels() {
+    @Test fun setupRequiresPatientCredentials() {
         composeTestRule.setContent {
-            // Render the full app in demo/offline mode.
-            NeuroXApp()
+            MaterialTheme { PatientSignInScreen(PatientAuthState(server = "https://care.example/")) { _, _, _ -> } }
         }
-        // Each bottom-nav tab must have a visible label so elderly users
-        // can identify it without recognising the icon alone.
-        composeTestRule.onNodeWithText("Home").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Activities").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Reminders").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Safety").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Welcome to NeuroX").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Sign in").assertIsNotEnabled()
+        composeTestRule.onNodeWithText("Patient email").performTextInput("patient@example.com")
+        composeTestRule.onNodeWithText("Password").performTextInput("PatientPassword!123")
+        composeTestRule.onNodeWithText("Sign in").assertIsEnabled()
     }
 
-    @Test
-    fun homeScreen_displaysPatientName() {
-        composeTestRule.setContent { NeuroXApp() }
-        // The demo patient name "Maya" should appear in the greeting.
-        composeTestRule.onNodeWithText("Maya", substring = true).assertIsDisplayed()
-    }
-
-    // --------------------------------------------------------------
-    // Activities tab
-    // --------------------------------------------------------------
-
-    @Test
-    fun activitiesTab_listsDefaultActivities() {
-        composeTestRule.setContent { NeuroXApp() }
-
-        // Navigate to Activities tab.
-        composeTestRule.onNodeWithText("Activities").performClick()
-
-        // Fallback activity list must always be available (offline-safe).
-        composeTestRule.onNodeWithText("Memory Match", substring = true).assertIsDisplayed()
-        composeTestRule.onNodeWithText("Remember the Objects", substring = true).assertIsDisplayed()
-    }
-
-    @Test
-    fun activitiesTab_activityCardIsTappable() {
-        composeTestRule.setContent { NeuroXApp() }
-        composeTestRule.onNodeWithText("Activities").performClick()
-
-        // Tap the first activity card — should open the game without crashing.
-        composeTestRule.onNodeWithText("Memory Match", substring = true).performClick()
-
-        // After tapping, the game-entry screen or start button should appear.
-        composeTestRule.onNodeWithText("Start", substring = true, ignoreCase = true).assertIsDisplayed()
-    }
-
-    // --------------------------------------------------------------
-    // Reminders tab
-    // --------------------------------------------------------------
-
-    @Test
-    fun remindersTab_showsRemindersSection() {
-        composeTestRule.setContent { NeuroXApp() }
-        composeTestRule.onNodeWithText("Reminders").performClick()
-
-        // The reminders heading must be visible.
-        composeTestRule.onNodeWithText("Reminders", substring = true).assertIsDisplayed()
-    }
-
-    // --------------------------------------------------------------
-    // Safety tab
-    // --------------------------------------------------------------
-
-    @Test
-    fun safetyTab_showsStatusSection() {
-        composeTestRule.setContent { NeuroXApp() }
-        composeTestRule.onNodeWithText("Safety").performClick()
-
-        // Both action buttons must be present so the user can call for help.
-        composeTestRule.onNodeWithText("I Need Help", substring = true, ignoreCase = true).assertIsDisplayed()
-        composeTestRule.onNodeWithText("SOS", substring = true, ignoreCase = true).assertIsDisplayed()
-    }
-
-    @Test
-    fun safetyTab_sosButtonHasContentDescription() {
-        composeTestRule.setContent { NeuroXApp() }
-        composeTestRule.onNodeWithText("Safety").performClick()
-
-        // Verify the SOS button is identifiable by accessibility tooling.
-        composeTestRule
-            .onNode(hasContentDescription("SOS", substring = true, ignoreCase = true))
-            .assertExists()
-    }
-
-    // --------------------------------------------------------------
-    // Accessibility: minimum touch-target size (48dp)
-    // --------------------------------------------------------------
-
-    @Test
-    fun allTabButtons_meetMinimumTapTargetSize() {
-        composeTestRule.setContent { NeuroXApp() }
-        // Verify that each navigation button node exists and is clickable.
-        listOf("Home", "Activities", "Reminders", "Safety").forEach { label ->
-            composeTestRule
-                .onNodeWithText(label)
-                .assertHasClickAction()
+    @Test fun submitPassesDetailsAndClearsPassword() {
+        var submitted: List<String>? = null
+        composeTestRule.setContent {
+            MaterialTheme {
+                PatientSignInScreen(PatientAuthState(server = "https://care.example/")) { server, email, password ->
+                    submitted = listOf(server, email, password)
+                }
+            }
         }
+        composeTestRule.onNodeWithText("Patient email").performTextInput("patient@example.com")
+        composeTestRule.onNodeWithText("Password").performTextInput("PatientPassword!123")
+        composeTestRule.onNodeWithText("Sign in").performClick()
+        assertEquals(listOf("https://care.example/", "patient@example.com", "PatientPassword!123"), submitted)
+        composeTestRule.onNodeWithText("Sign in").assertIsNotEnabled()
+    }
+
+    @Test fun setupShowsRecoverableErrors() {
+        composeTestRule.setContent {
+            MaterialTheme {
+                PatientSignInScreen(PatientAuthState(error = "Check your connection and try again.")) { _, _, _ -> }
+            }
+        }
+        composeTestRule.onNodeWithText("Check your connection and try again.").assertIsDisplayed()
+    }
+
+    @Test fun profileUsesTheSignedInPatient() {
+        composeTestRule.setContent {
+            MaterialTheme { Profile(Modifier, "Test Patient", 68, languageConfigFor("en-IN")) }
+        }
+        composeTestRule.onNodeWithText("Test Patient").assertIsDisplayed()
+        composeTestRule.onNodeWithText("68 years", substring = true).assertExists()
+        composeTestRule.onNodeWithText("Maya Devi").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Anita Devi").assertDoesNotExist()
+    }
+
+    @Test fun missingSafetyDataDoesNotClaimSafetyOrInventReturnTime() {
+        composeTestRule.setContent {
+            MaterialTheme { Safety(Modifier, null, {}, {}) }
+        }
+        composeTestRule.onNodeWithText("Safety status unavailable").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Not set").assertIsDisplayed()
+        composeTestRule.onNodeWithText("6:00 PM").assertDoesNotExist()
+        composeTestRule.onNodeWithText("At Home Â· Safe").assertDoesNotExist()
     }
 }

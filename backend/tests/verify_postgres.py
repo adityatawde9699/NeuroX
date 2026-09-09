@@ -4,7 +4,7 @@ PostgreSQL migration smoke check.
 This script is intentionally NOT a pytest test module so it never fails in the
 standard CI run.  Run it manually when a PostgreSQL instance is available:
 
-    POSTGRES_URL="postgresql+psycopg2://user:pass@localhost/neurox_test" \\
+    POSTGRES_URL="postgresql+psycopg://user:pass@localhost/neurox_test" \\
         python tests/verify_postgres.py
 
 The script:
@@ -13,7 +13,7 @@ The script:
   3. Downgrades back to base to verify the down path.
   4. Prints PASSED or raises SystemExit(1) on failure.
 
-If POSTGRES_URL is not set, the script exits 0 with an informational message.
+Requires an empty disposable database; missing configuration fails closed.
 """
 
 import os
@@ -23,10 +23,10 @@ POSTGRES_URL = os.environ.get("POSTGRES_URL")
 
 if not POSTGRES_URL:
     print(
-        "INFO: POSTGRES_URL is not set — skipping PostgreSQL migration verification.\n"
+        "ERROR: POSTGRES_URL is required for PostgreSQL migration verification.\n"
         "      Set POSTGRES_URL to a valid PostgreSQL connection string to run this check."
     )
-    sys.exit(0)
+    sys.exit(1)
 
 # ── only import the heavy dependencies when actually running ──────────────────
 from alembic import command  # noqa: E402
@@ -55,17 +55,54 @@ EXPECTED_TABLES = {
 
 def run() -> None:
     cfg = Config(str(ALEMBIC_INI))
-    cfg.set_main_option("sqlalchemy.url", POSTGRES_URL)
-
-    print(f"Connecting to: {POSTGRES_URL[:40]}…")
+    cfg.set_main_option("script_location", str(BACKEND_ROOT / "alembic"))
+    cfg.attributes["database_url"] = POSTGRES_URL
+    cfg.set_main_option("sqlalchemy.url", POSTGRES_URL.replace("%", "%%"))
+    url = sa.engine.make_url(POSTGRES_URL)
+    if url.get_backend_name() != "postgresql":
+        raise SystemExit("Verification requires a disposable PostgreSQL database.")
+    engine = sa.create_engine(POSTGRES_URL)
+    if sa.inspect(engine).get_table_names():
+        engine.dispose()
+        raise SystemExit("Refusing destructive verification: database is not empty.")
+    print("Connected to an empty disposable PostgreSQL database.")
 
     # ── upgrade ──────────────────────────────────────────────────────────────
     print("Running: alembic upgrade head …")
+    command.upgrade(cfg, "20260907_001")
+    with engine.begin() as db:
+        db.execute(
+            sa.text(
+                "INSERT INTO users (id,name,email,role,created_at) VALUES ('migration-p','Patient','migration@example.test','PATIENT',CURRENT_TIMESTAMP)"
+            )
+        )
+        db.execute(
+            sa.text(
+                "INSERT INTO patients (user_id,age,preferred_language) VALUES ('migration-p',68,'English')"
+            )
+        )
+    command.upgrade(cfg, "head")
+    with engine.connect() as db:
+        assert (
+            db.execute(
+                sa.text(
+                    "SELECT next_difficulty FROM patients WHERE user_id='migration-p'"
+                )
+            ).scalar_one()
+            == 2
+        )
+    command.downgrade(cfg, "20260907_001")
+    with engine.connect() as db:
+        assert (
+            db.execute(
+                sa.text("SELECT age FROM patients WHERE user_id='migration-p'")
+            ).scalar_one()
+            == 68
+        )
     command.upgrade(cfg, "head")
     print("  upgrade OK")
 
     # ── inspect tables ───────────────────────────────────────────────────────
-    engine = sa.create_engine(POSTGRES_URL)
     inspector = sa.inspect(engine)
     actual_tables = set(inspector.get_table_names())
     missing = EXPECTED_TABLES - actual_tables

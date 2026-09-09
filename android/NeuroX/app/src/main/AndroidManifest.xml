@@ -3,6 +3,8 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
 
     <application
+        android:allowBackup="false"
+        android:usesCleartextTraffic="false"
         android:theme="@style/Theme.NeuroX"
         android:label="NeuroX">
         <activity
@@ -15,4 +17,3 @@
         </activity>
     </application>
 </manifest>
-

@@ -78,9 +78,11 @@ object IntentParser {
     fun parse(transcript: String, languageCode: String = "en-IN"): VoiceIntent {
         val text = transcript.trim().lowercase()
 
-        // Activity intents — detect the activity type from the transcript first,
-        // so that activity names containing help-adjacent words (e.g. "recall")
-        // are not mistakenly classified as RequestHelp.
+        // Help must take priority even when the same phrase mentions an activity.
+        if (helpKeywords.any { text.contains(it) }) {
+            return VoiceIntent.RequestHelp
+        }
+
         val hasStartVerb = startActivityKeywords.any { text.contains(it) }
         val activityMention = when {
             memoryMatchKeywords.any { text.contains(it) }  -> "memory-match"
@@ -91,11 +93,6 @@ object IntentParser {
 
         if (activityMention != null || (hasStartVerb && !text.contains("help"))) {
             return VoiceIntent.StartActivity(activityId = activityMention)
-        }
-
-        // Safety / help intent
-        if (helpKeywords.any { text.contains(it) }) {
-            return VoiceIntent.RequestHelp
         }
 
         // Reminder intent
@@ -125,6 +122,6 @@ object IntentParser {
         }
         is VoiceIntent.ListReminders  -> "Showing today's reminders…"
         is VoiceIntent.RequestHelp    -> "Opening Safety — I Need Help…"
-        is VoiceIntent.Unknown        -> "I heard: "${intent.transcript}" — tap an option below."
+        is VoiceIntent.Unknown        -> "I heard: \"${intent.transcript}\" — tap an option below."
     }
 }

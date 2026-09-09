@@ -1,6 +1,6 @@
 import { FormEvent, useState } from 'react'
 import { authApi } from '../api/dashboardApi'
-import { storeSession } from '../auth/authStorage'
+import { readAccessToken, storeSession } from '../auth/authStorage'
 import type { AuthUser } from '../types/dashboard'
 
 export function SettingsPage({user, onUpdated}: {user: AuthUser; onUpdated: (user: AuthUser) => void}) {
@@ -15,7 +15,7 @@ export function SettingsPage({user, onUpdated}: {user: AuthUser; onUpdated: (use
   const [passwordSaving, setPasswordSaving] = useState(false)
   const save = async (event: FormEvent) => {
     event.preventDefault(); setSaving(true); setMessage(''); setError('')
-    try { const updated = await authApi.updateProfile(name); const token = localStorage.getItem('neurox-token') ?? ''; const refresh = localStorage.getItem('neurox-refresh-token') ?? ''; storeSession(token, refresh, updated); onUpdated(updated); setMessage('Profile settings saved.') } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to save profile settings.') } finally { setSaving(false) }
+    try { const updated = await authApi.updateProfile(name); storeSession(readAccessToken() ?? '', updated); onUpdated(updated); setMessage('Profile settings saved.') } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to save profile settings.') } finally { setSaving(false) }
   }
   const changePassword = async (event: FormEvent) => {
     event.preventDefault(); setPasswordSaving(true); setPasswordMessage(''); setPasswordError('')

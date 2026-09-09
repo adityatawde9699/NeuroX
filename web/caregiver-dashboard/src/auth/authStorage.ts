@@ -1,23 +1,36 @@
 import type { AuthUser } from '../types/dashboard'
 
-const keys = {token: 'neurox-token', refresh: 'neurox-refresh-token', user: 'neurox-user'} as const
+// Access tokens and user data live only in memory. Refresh tokens are HttpOnly cookies.
+let token: string | null = null
+let user: AuthUser | null = null
+let version = 0
+const listeners = new Set<() => void>()
 
-export const readStoredUser = (): AuthUser | null => {
-  const value = localStorage.getItem(keys.user)
-  if (!value) return null
-  try { return JSON.parse(value) as AuthUser } catch { return null }
+const removeLegacySession = () => {
+  try {
+    for (const key of ['neurox-token', 'neurox-refresh-token', 'neurox-user']) localStorage.removeItem(key)
+  } catch { /* Cookie sessions also work when browser storage is unavailable. */ }
 }
+removeLegacySession()
 
-export const storeSession = (accessToken: string, refreshToken: string, user: AuthUser) => {
-  localStorage.setItem(keys.token, accessToken)
-  localStorage.setItem(keys.refresh, refreshToken)
-  localStorage.setItem(keys.user, JSON.stringify(user))
+export const readStoredUser = () => user
+export const readAccessToken = () => token
+export const sessionVersion = () => version
+export const subscribeSession = (listener: () => void) => {
+  listeners.add(listener)
+  return () => { listeners.delete(listener) }
 }
-
-export const readRefreshToken = () => localStorage.getItem(keys.refresh)
-
+export const storeSession = (accessToken: string, nextUser: AuthUser) => {
+  token = accessToken
+  user = nextUser
+  version += 1
+  removeLegacySession()
+  listeners.forEach(listener => listener())
+}
 export const clearSession = () => {
-  localStorage.removeItem(keys.token)
-  localStorage.removeItem(keys.refresh)
-  localStorage.removeItem(keys.user)
+  token = null
+  user = null
+  version += 1
+  removeLegacySession()
+  listeners.forEach(listener => listener())
 }

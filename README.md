@@ -31,7 +31,9 @@ Caregiver dashboard ──┘      │
 android/NeuroX/              Jetpack Compose patient application
 backend/app/                 FastAPI application
   ai/personalization/        Adaptive difficulty service
-  services/                  External-service adapters (Google Identity)
+  services/                  Auth, patients, reminders, activities, reports, safety, sync, alerts
+  routers/                   HTTP bindings for each domain
+  access.py                  Shared role and assignment authorization
 web/caregiver-dashboard/     React + TypeScript caregiver application
 docker-compose.yml           Local PostgreSQL service
 .env.example                 Required environment variables
@@ -143,11 +145,44 @@ Open `http://localhost:5173`.
 
 ### 5. Android app
 
-Open `android/NeuroX` in a current stable Android Studio, allow Gradle sync, then run on an Android emulator or device with API 26+.
+Open `android/NeuroX` in Android Studio with JDK 17, allow Gradle sync, then run
+on an Android emulator or device with API 26+. First launch asks for the server
+address and patient email/password. Debug builds suggest `http://10.0.2.2:8000/`
+for the emulator; on a physical device enter the development machine's LAN
+address. Release builds start with an empty server field and require HTTPS.
+
+For local demo testing, enter `maya@neurox.demo` / `NeuroXDemo!2026` manually.
+Patient sign-in requires a provisioned patient profile; public registration
+alone does not create one. The app retains its patient/server binding across
+session expiry to protect offline records. It does not support switching
+patients or servers on an existing installation. Prototype upgrades require
+sign-in again; if the binding cannot be recovered, cached/queued records need
+supervised recovery before reconnecting. Do not clear application data to bypass
+that guard if unsynced records need to be preserved.
 
 ## Authentication
 
-NeuroX supports email/password accounts and Google Identity Services for caregivers. Passwords are bcrypt-hashed; the backend creates short-lived access tokens plus rotating refresh tokens. Caregiver-only APIs require a valid JWT with an allowed role.
+NeuroX supports email/password accounts and Google Identity Services for caregivers.
+Passwords are bcrypt-hashed. Native clients use the `/auth/login`, `/auth/refresh`,
+and `/auth/logout` token APIs. Android encrypts its session using an Android
+Keystore key and refreshes expired access tokens during requests and background sync.
+
+The dashboard uses `/auth/browser/login`, `/auth/browser/google`,
+`/auth/browser/refresh`, and `/auth/browser/logout`. Refresh tokens are kept in
+an HttpOnly, SameSite=Strict cookie, marked Secure outside development. Access
+tokens and user data stay in memory; old localStorage session entries are removed.
+Reloading restores the session through the cookie. Browser session endpoints
+require an exact allowed Origin, including login/logout. Native token endpoints
+remain compatible with existing clients.
+
+Deploy the API at the host root and serve the dashboard/API on the same site
+(for example `care.example.com` and `api.example.com`), both over HTTPS. The
+cookie path is `/auth/browser`; a cross-site deployment or API path-prefix proxy
+needs a reviewed cookie/proxy configuration. Configure `CORS_ORIGINS` with the
+exact dashboard origin. `APP_ENV=staging` or `production` requires PostgreSQL,
+explicit HTTPS origins, and a non-placeholder JWT secret of at least 32 characters.
+Those environments neither create tables nor seed demo accounts at startup;
+run Alembic migrations before starting the service.
 
 ### Google sign-in setup
 
@@ -181,6 +216,31 @@ The dashboard sends Google’s ID credential to FastAPI. The backend verifies it
 | GET | `/patients/{id}/safety` | Current reported safety state |
 
 ## Validation
+
+Android patient screens observe `PatientViewModel` through StateFlow. The
+`PatientRepository` interface permits offline and failure-path tests without a
+device or live server. `PatientScreens.kt` contains presentation components;
+`MainActivity.kt` handles startup and navigation. Game progress recovery after
+process death and device workflow validation remain outstanding.
+
+`PatientDependencies` wires encrypted sessions, `PatientLocalDataSource` (Room),
+`PatientRemoteDataSource` (Retrofit), and `NeuroXRepository`. Patient mutation
+use cases live in `PatientUseCases.kt`; the ViewModel owns observable UI state.
+Backend `main.py` is now only application composition. Notification services
+expose the existing alert feed; this refactor does not add push/SMS delivery.
+
+GitHub Actions runs backend tests, dashboard tests/build, PostgreSQL migration
+upgrade/rollback on a disposable database, and Android debug/release compilation, unit
+tests, lint, and instrumentation-test compilation. The Android job uploads a
+debug APK; device/emulator tests still need to be run separately.
+Security gates include Ruff, Bandit, pip-audit, npm audit, OSV scanning of the
+resolved Android release graph, and release credential/manifest checks.
+These checks have passed locally; remote CI must pass before Phase 0 is accepted.
+
+Use JDK 17 for the Android Gradle build. HTTP access to the emulator's local
+backend is permitted only in debug builds; release builds reject cleartext
+traffic. The Android setup/sign-in flow and encrypted session storage are
+implemented; the broader production gates in `PLAN.md` remain open.
 
 ### Backend tests
 
@@ -220,6 +280,34 @@ cd android/NeuroX
 cd backend
 alembic upgrade head
 ```
+
+For destructive upgrade/rollback verification, use an **empty disposable**
+PostgreSQL database, never the application database:
+
+```bash
+POSTGRES_URL=postgresql+psycopg://user:password@localhost/neurox_migration_test python tests/verify_postgres.py
+```
+
+The verifier refuses nonempty databases and overrides `DATABASE_URL` explicitly.
+PostgreSQL 18.6 has passed locally; CI verifies PostgreSQL 16. Revision 001 is now
+frozen instead of importing current models. Existing databases created by the
+old prototype's `create_all` need schema inspection before stamping or applying
+migrations; do not use this disposable-database verifier to repair them.
+
+### Security checks
+
+```bash
+cd backend
+python -m pip install -r requirements-security.txt
+ruff check app --select F
+bandit -r app
+pip-audit
+```
+
+From `android/NeuroX`, run `./gradlew exportReleaseDependencies`, then
+`python ../../scripts/check_android_dependencies.py app/build/reports/release-dependencies.json`.
+The advisory check requires network access and fails on lookup errors or any
+reported vulnerability. See `.github/workflows/ci.yml` for the complete gates.
 
 ## Demo
 

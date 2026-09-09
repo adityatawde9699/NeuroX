@@ -1,4 +1,5 @@
 import type { AuthResponse } from '../types/dashboard'
+import { clearSession, readAccessToken, sessionVersion, storeSession } from '../auth/authStorage'
 
 const apiUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
 
@@ -8,9 +9,6 @@ export class ApiError extends Error {
     this.name = 'ApiError'
   }
 }
-
-export const getStoredToken = () => localStorage.getItem('neurox-token')
-export const getStoredRefreshToken = () => localStorage.getItem('neurox-refresh-token')
 
 const parseResponse = async <T>(response: Response): Promise<T> => {
   if (response.status === 204) return undefined as T
@@ -22,28 +20,43 @@ const parseResponse = async <T>(response: Response): Promise<T> => {
   return body as T
 }
 
+let refreshFlight: Promise<AuthResponse> | null = null
+export function restoreSession(): Promise<AuthResponse> {
+  if (refreshFlight) return refreshFlight
+  const version = sessionVersion()
+  refreshFlight = fetch(`${apiUrl}/auth/browser/refresh`, {
+    method: 'POST', credentials: 'include', headers: {Accept: 'application/json'},
+  }).then(parseResponse<AuthResponse>).then(data => {
+    if (sessionVersion() !== version) throw new ApiError(401, 'The session changed. Please sign in again.')
+    storeSession(data.access_token, data.user)
+    return data
+  }).catch(error => {
+    if (error instanceof ApiError && error.status === 401 && sessionVersion() === version) clearSession()
+    throw error
+  }).finally(() => { refreshFlight = null })
+  return refreshFlight
+}
+
+export async function endSession(): Promise<void> {
+  // Wait for a rotating cookie response before deleting/revoking that cookie.
+  if (refreshFlight) await refreshFlight.catch(() => undefined)
+  await request('/auth/browser/logout', {method: 'POST'}, false)
+  clearSession()
+}
+
 export async function request<T>(path: string, options: RequestInit = {}, retry = true): Promise<T> {
   const headers = new Headers(options.headers)
-  if (!headers.has('Accept')) headers.set('Accept', 'application/json')
+  headers.set('Accept', 'application/json')
   if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
-  const token = getStoredToken()
-  if (token) headers.set('Authorization', `Bearer ${token}`)
-  const response = await fetch(`${apiUrl}${path}`, {...options, headers})
-  if (response.status === 401 && retry) {
-    const refreshToken = getStoredRefreshToken()
-    if (refreshToken) {
-      const refreshed = await fetch(`${apiUrl}/auth/refresh`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({refresh_token: refreshToken})})
-      if (refreshed.ok) {
-        const data = await refreshed.json() as AuthResponse
-        localStorage.setItem('neurox-token', data.access_token)
-        localStorage.setItem('neurox-refresh-token', data.refresh_token)
-        return request<T>(path, options, false)
-      }
-    }
-    localStorage.removeItem('neurox-token')
-    localStorage.removeItem('neurox-refresh-token')
-    localStorage.removeItem('neurox-user')
+  const token = readAccessToken()
+  if (token && !path.startsWith('/auth/browser/')) headers.set('Authorization', `Bearer ${token}`)
+  const response = await fetch(`${apiUrl}${path}`, {...options, credentials: 'include', headers})
+  if (response.status === 401 && retry && !path.startsWith('/auth/browser/')) {
+    // Concurrent requests may have been sent with the same expired token.
+    if (!readAccessToken() || readAccessToken() === token) await restoreSession()
+    return request<T>(path, options, false)
   }
+  if (response.status === 401 && !path.startsWith('/auth/browser/')) clearSession()
   return parseResponse<T>(response)
 }
 

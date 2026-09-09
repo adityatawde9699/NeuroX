@@ -30,6 +30,7 @@ pnpm-debug.log*
 
 # Android / Gradle / Android Studio
 .gradle/
+.kotlin/
 **/build/
 android/.idea/
 android/**/*.iml

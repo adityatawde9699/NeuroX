@@ -1,9 +1,11 @@
 """Google Identity Services token verification adapter."""
+
 # ===================================
 #  Imports
 # ===================================
 import os
 from fastapi import HTTPException, status
+
 
 # ===================================
 #  Authentication using Google Identity Services
