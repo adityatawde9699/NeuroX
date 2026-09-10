@@ -2,6 +2,7 @@ package org.neurox.patient
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -69,5 +70,50 @@ class PatientFlowTest {
         composeTestRule.onNodeWithText("Not set").assertIsDisplayed()
         composeTestRule.onNodeWithText("6:00 PM").assertDoesNotExist()
         composeTestRule.onNodeWithText("At Home · Safe").assertDoesNotExist()
+    }
+
+    @Test fun guidedActivityHasPracticePauseSupportiveCorrectionAndCompletion() {
+        var completion: Triple<Int, Float, Float>? = null
+        composeTestRule.setContent {
+            MaterialTheme {
+                GuidedChoiceActivity(Modifier, "sequence-recall", "Test Patient", {}) { attempts, time, accuracy ->
+                    completion = Triple(attempts, time, accuracy)
+                }
+            }
+        }
+
+        composeTestRule.onNodeWithText("There is no countdown", substring = true).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Try a practice step").performClick()
+        composeTestRule.onNodeWithText("Practice").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Start activity").performClick()
+        composeTestRule.onNodeWithText("Pause").assertHasClickAction().performClick()
+        composeTestRule.onNodeWithText("Your place is saved", substring = true).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Continue").performClick()
+        composeTestRule.onNodeWithText("I am ready").performClick()
+        composeTestRule.onNodeWithText("Book").performClick()
+        composeTestRule.onNodeWithText("That is okay", substring = true).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Key").performClick()
+        composeTestRule.onNodeWithText("Well done, Test Patient!", substring = true).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Continue").performClick()
+
+        assertEquals(2, completion?.first)
+        assertEquals(.5f, completion?.third)
+    }
+
+    @Test fun reminderOffersLargeDoneAndSnoozeActionsWithMedicationGuardrail() {
+        composeTestRule.setContent {
+            MaterialTheme {
+                Reminders(
+                    Modifier,
+                    listOf(ReminderItem("medicine", "Check care plan", "2026-09-11T09:00:00+05:30", false, type = "medication")),
+                    {},
+                    {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("Snooze 10 min").assertHasClickAction().assertHeightIsAtLeast(48.dp)
+        composeTestRule.onNodeWithText("Done").assertHasClickAction().assertHeightIsAtLeast(48.dp)
+        composeTestRule.onNodeWithText("does not give dosage advice", substring = true).assertIsDisplayed()
     }
 }

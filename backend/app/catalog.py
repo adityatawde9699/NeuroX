@@ -4,18 +4,42 @@ ACTIVITIES = [
         "title": "Memory Match",
         "description": "Match two familiar objects.",
         "difficulty": 2,
+        "contentVersion": "2026.09-v1",
     },
     {
         "id": "object-recall",
         "title": "Remember the Objects",
         "description": "Look, listen, then remember.",
         "difficulty": 2,
+        "contentVersion": "2026.09-v1",
     },
     {
         "id": "pattern",
         "title": "Pattern Completion",
         "description": "Choose what comes next.",
         "difficulty": 2,
+        "contentVersion": "2026.09-v1",
+    },
+    {
+        "id": "sequence-recall",
+        "title": "Sequence Recall",
+        "description": "Remember a short order of familiar daily items.",
+        "difficulty": 2,
+        "contentVersion": "2026.09-v1",
+    },
+    {
+        "id": "daily-routine",
+        "title": "Daily Routine Recall",
+        "description": "Put a familiar morning routine in a helpful order.",
+        "difficulty": 2,
+        "contentVersion": "2026.09-v1",
+    },
+    {
+        "id": "story-recall",
+        "title": "Story Recall",
+        "description": "Listen to a short everyday story and remember one detail.",
+        "difficulty": 2,
+        "contentVersion": "2026.09-v1",
     },
 ]
 

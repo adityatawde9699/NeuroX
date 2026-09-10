@@ -1,0 +1,175 @@
+name: neurox-production
+
+services:
+  proxy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    environment:
+      NEUROX_DOMAIN: ${NEUROX_DOMAIN:?set NEUROX_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+
+  backend:
+    build: ../backend
+    restart: unless-stopped
+    environment: &backend_environment
+      APP_ENV: production
+      CORS_ORIGINS: https://${NEUROX_DOMAIN:?set NEUROX_DOMAIN}
+      PUBLIC_WEB_URL: https://${NEUROX_DOMAIN:?set NEUROX_DOMAIN}
+      DATABASE_URL_FILE: /run/secrets/database_url
+      REDIS_URL_FILE: /run/secrets/redis_url
+      JWT_SECRET_FILE: /run/secrets/jwt_secret
+      SMTP_PASSWORD_FILE: /run/secrets/smtp_password
+      SMTP_HOST: ${SMTP_HOST:?set SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_FROM: ${SMTP_FROM:?set SMTP_FROM}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
+      SMS_GATEWAY_URL: ${SMS_GATEWAY_URL:-}
+      SMS_GATEWAY_TOKEN_FILE: /run/secrets/sms_gateway_token
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    secrets: &backend_secrets
+      - database_url
+      - redis_url
+      - jwt_secret
+      - smtp_password
+      - sms_gateway_token
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  migrate:
+    build: ../backend
+    restart: "no"
+    command: ["alembic", "upgrade", "head"]
+    environment: *backend_environment
+    secrets: *backend_secrets
+    depends_on:
+      db:
+        condition: service_healthy
+
+  worker:
+    build: ../backend
+    restart: unless-stopped
+    command: ["python", "-m", "app.worker"]
+    environment: *backend_environment
+    secrets: *backend_secrets
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ../web/caregiver-dashboard
+      args:
+        VITE_API_BASE_URL: ""
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: neurox
+      POSTGRES_USER: neurox
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_INITDB_ARGS: --data-checksums
+    secrets:
+      - postgres_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U neurox -d neurox"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD}"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a '${REDIS_PASSWORD}' ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  object-storage:
+    image: minio/minio:RELEASE.2025-02-07T23-21-09Z
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER_FILE: /run/secrets/minio_access_key
+      MINIO_ROOT_PASSWORD_FILE: /run/secrets/minio_secret_key
+    secrets:
+      - minio_access_key
+      - minio_secret_key
+    volumes:
+      - object_data:/data
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.132.0
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol/config.yml"]
+    volumes:
+      - ./otel-collector.yml:/etc/otelcol/config.yml:ro
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    restart: unless-stopped
+    command: ["--config.file=/etc/prometheus/prometheus.yml"]
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus-alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+
+secrets:
+  database_url:
+    external: true
+  redis_url:
+    external: true
+  jwt_secret:
+    external: true
+  smtp_password:
+    external: true
+  sms_gateway_token:
+    external: true
+  postgres_password:
+    external: true
+  minio_access_key:
+    external: true
+  minio_secret_key:
+    external: true
+
+volumes:
+  postgres_data:
+  redis_data:
+  object_data:
+  caddy_data:
+  caddy_config:
+  prometheus_data:

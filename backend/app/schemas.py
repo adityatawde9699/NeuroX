@@ -3,6 +3,7 @@
 # ===================================
 from datetime import datetime
 from enum import Enum
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -58,6 +59,27 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
+class SessionView(BaseModel):
+    id: str
+    created_at: datetime
+    last_used_at: datetime | None
+    expires_at: datetime
+    device_name: str
+
+
+class SessionRevocationResponse(BaseModel):
+    revoked: bool
+    session_id: str | None = None
+
+
+class PhoneVerificationRequest(BaseModel):
+    phone_number: str = Field(pattern=r"^\+[1-9][0-9]{7,14}$")
+
+
+class PhoneVerificationConfirm(BaseModel):
+    code: str = Field(pattern=r"^[0-9]{6}$")
+
+
 # Activity Completion schema representing the completion of an activity by a user
 class ActivityCompletion(BaseModel):
     user_id: str
@@ -71,6 +93,11 @@ class ActivityCompletion(BaseModel):
     difficulty_level: int = Field(ge=1, le=5)
     offline_created: bool = False
     event_id: str
+    content_version: str = Field(default="legacy", min_length=1, max_length=32)
+    interruptions: int = Field(default=0, ge=0, le=100)
+    accessibility_mode: str = Field(default="standard", min_length=1, max_length=32)
+    app_version: str = Field(default="unknown", min_length=1, max_length=32)
+    model_version: str = Field(default="adaptive-v1", min_length=1, max_length=32)
 
 
 # Starting Activity
@@ -80,17 +107,31 @@ class ActivityStart(BaseModel):
     started_at: datetime
     event_id: str = Field(min_length=8, max_length=64)
     offline_created: bool = False
+    content_version: str = Field(default="legacy", min_length=1, max_length=32)
+    accessibility_mode: str = Field(default="standard", min_length=1, max_length=32)
+    app_version: str = Field(default="unknown", min_length=1, max_length=32)
+    model_version: str = Field(default="adaptive-v1", min_length=1, max_length=32)
 
 
 # Create Reminder
 class ReminderCreate(BaseModel):
     patient_id: str
-    type: str = Field(min_length=2, max_length=32)
+    type: str = Field(pattern=r"^(medication|hydration|appointment|activity|exercise)$")
     title: str = Field(min_length=2, max_length=100)
     description: str | None = Field(default=None, max_length=255)
     scheduled_time: datetime
     repeat_rule: str | None = Field(default=None, max_length=64)
     enabled: bool = True
+    timezone_name: str = Field(default="Asia/Kolkata", min_length=1, max_length=64)
+
+    @field_validator("timezone_name")
+    @classmethod
+    def valid_timezone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except ZoneInfoNotFoundError as error:
+            raise ValueError("timezone_name must be a valid IANA time zone") from error
+        return value
 
 
 # Update Reminder
@@ -101,6 +142,20 @@ class ReminderUpdate(BaseModel):
     repeat_rule: str | None = Field(default=None, max_length=64)
     enabled: bool | None = None
     completed: bool | None = None
+    status: str | None = Field(default=None, pattern=r"^(upcoming|snoozed|done|missed)$")
+    snoozed_until: datetime | None = None
+    timezone_name: str | None = Field(default=None, min_length=1, max_length=64)
+
+    @field_validator("timezone_name")
+    @classmethod
+    def valid_timezone(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        try:
+            ZoneInfo(value)
+        except ZoneInfoNotFoundError as error:
+            raise ValueError("timezone_name must be a valid IANA time zone") from error
+        return value
 
 
 # Emergency Contact Schemas
@@ -188,6 +243,35 @@ class LocationSharingUpdate(BaseModel):
 class PasswordChangeRequest(BaseModel):
     current_password: str = Field(min_length=8)
     new_password: str = Field(min_length=8)
+
+
+class PasswordResetRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str = Field(min_length=32, max_length=256)
+    new_password: str = Field(min_length=8)
+
+
+class EmailVerificationConfirm(BaseModel):
+    token: str = Field(min_length=32, max_length=256)
+
+
+class CaregiverSettingsUpdate(BaseModel):
+    available: bool | None = None
+    notify_sos: bool | None = None
+    notify_safety_alerts: bool | None = None
+    notify_reminders: bool | None = None
+
+
+class AssignmentCreate(BaseModel):
+    caregiver_id: str = Field(min_length=1, max_length=36)
+    patient_id: str = Field(min_length=1, max_length=36)
+
+
+class PrivacyReview(BaseModel):
+    status: str = Field(pattern="^(approved|rejected)$")
 
 
 # Offline mutation envelope shared by Android and the sync endpoint.

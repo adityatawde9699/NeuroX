@@ -9,6 +9,7 @@ Covers:
   - Unrelated caregiver gets 403 on acknowledge routes.
   - SOS created via /sync/events appears in /patients/{id}/safety.
 """
+
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -85,7 +86,12 @@ def test_safe_zone_exit_alert_created_for_out_of_range_location(client):
     email = f"geotest-{uuid4().hex[:8]}@example.com"
     reg = client.post(
         "/auth/register",
-        json={"name": "Geo Test Patient", "email": email, "password": "Testing!2026", "role": "PATIENT"},
+        json={
+            "name": "Geo Test Patient",
+            "email": email,
+            "password": "Testing!2026",
+            "role": "PATIENT",
+        },
     )
     assert reg.status_code == 201
     geo_id = reg.json()["user"]["id"]
@@ -95,7 +101,12 @@ def test_safe_zone_exit_alert_created_for_out_of_range_location(client):
     client.put(
         f"/patients/{geo_id}/safety/settings",
         headers=geo_headers,
-        json={"safe_zone_name": "Home", "safe_zone_latitude": 26.1445, "safe_zone_longitude": 91.7362, "safe_zone_radius_m": 250},
+        json={
+            "safe_zone_name": "Home",
+            "safe_zone_latitude": 26.1445,
+            "safe_zone_longitude": 91.7362,
+            "safe_zone_radius_m": 250,
+        },
     )
     client.put(
         f"/patients/me/privacy/location-sharing",
@@ -106,7 +117,13 @@ def test_safe_zone_exit_alert_created_for_out_of_range_location(client):
     resp = client.post(
         f"/patients/{geo_id}/location-updates",
         headers=geo_headers,
-        json={"latitude": 26.2345, "longitude": 91.7362, "accuracy_m": 20, "connection_state": "online", "captured_at": _iso(NOW)},
+        json={
+            "latitude": 26.2345,
+            "longitude": 91.7362,
+            "accuracy_m": 20,
+            "connection_state": "online",
+            "captured_at": _iso(NOW),
+        },
     )
     assert resp.status_code == 201
 
@@ -116,13 +133,14 @@ def test_safe_zone_exit_alert_created_for_out_of_range_location(client):
     assert exit_alerts[0]["severity"] == "high"
 
 
-
 # ─────────────────────────────────────────────
 # Phase 6 — Late-return alert
 # ─────────────────────────────────────────────
 
 
-def test_late_return_alert_created_when_expected_return_has_passed(client, patient_headers):
+def test_late_return_alert_created_when_expected_return_has_passed(
+    client, patient_headers
+):
     """Setting expected_return_at to 30 minutes in the past (beyond the 10-minute
     grace period) must produce a late_return alert on the next /safety fetch."""
     past_return = _iso(NOW - timedelta(minutes=30))
@@ -168,7 +186,9 @@ def test_assigned_caregiver_can_acknowledge_safety_alert(client):
     safety_resp = client.get("/patients/maya-demo/safety", headers=headers)
     open_alerts = safety_resp.json().get("alerts", [])
     if not open_alerts:
-        pytest.skip("No open safety alerts to acknowledge (safe-zone test may not have run first)")
+        pytest.skip(
+            "No open safety alerts to acknowledge (safe-zone test may not have run first)"
+        )
 
     alert_id = open_alerts[0]["id"]
     # Patients cannot acknowledge (caregiver_only middleware) — expect 403.

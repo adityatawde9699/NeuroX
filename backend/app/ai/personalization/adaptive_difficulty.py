@@ -1,4 +1,5 @@
 """Supportive activity personalization; never a clinical assessment."""
+
 from dataclasses import dataclass
 
 
@@ -17,7 +18,10 @@ def recommend_difficulty(data: PerformanceInput) -> tuple[int, float]:
     adjustment = 1 if score >= 0.80 else -1 if score < 0.50 else 0
     return max(1, min(5, data.current_difficulty + adjustment)), round(score, 2)
 
-def recommend_from_history(current: PerformanceInput, recent: list[PerformanceInput]) -> tuple[int, float]:
+
+def recommend_from_history(
+    current: PerformanceInput, recent: list[PerformanceInput]
+) -> tuple[int, float]:
     """Use a short recent history so one unusual session does not change the next level."""
     inputs = (recent + [current])[-5:]
     scores = []
@@ -27,5 +31,11 @@ def recommend_from_history(current: PerformanceInput, recent: list[PerformanceIn
     average_score = round(sum(scores) / len(scores), 2)
     strong_count = sum(score >= 0.80 for score in scores[-3:])
     low_count = sum(score < 0.50 for score in scores[-3:])
-    adjustment = 1 if len(scores) >= 3 and strong_count == 3 else -1 if len(scores) >= 3 and low_count == 3 else 0
+    adjustment = (
+        1
+        if len(scores) >= 3 and strong_count == 3
+        else -1
+        if len(scores) >= 3 and low_count == 3
+        else 0
+    )
     return max(1, min(5, current.current_difficulty + adjustment)), average_score

@@ -1,7 +1,9 @@
 """HTTP bindings for native and browser authentication."""
 
 from fastapi import APIRouter, Depends
+from app.rate_limit import login_limit, recovery_limit, registration_limit
 from app.schemas import AuthResponse
+from app.services import account_recovery
 from app.services import authentication as service
 
 router = APIRouter(tags=["authentication"])
@@ -11,12 +13,21 @@ router.add_api_route(
     methods=["POST"],
     response_model=AuthResponse,
     status_code=201,
+    dependencies=[Depends(registration_limit)],
 )
 router.add_api_route(
-    "/auth/login", service.login, methods=["POST"], response_model=AuthResponse
+    "/auth/login",
+    service.login,
+    methods=["POST"],
+    response_model=AuthResponse,
+    dependencies=[Depends(login_limit)],
 )
 router.add_api_route(
-    "/auth/google", service.google_login, methods=["POST"], response_model=AuthResponse
+    "/auth/google",
+    service.google_login,
+    methods=["POST"],
+    response_model=AuthResponse,
+    dependencies=[Depends(login_limit)],
 )
 router.add_api_route(
     "/auth/refresh", service.refresh, methods=["POST"], response_model=AuthResponse
@@ -27,23 +38,65 @@ router.add_api_route("/auth/me", service.update_current_user, methods=["PUT"])
 router.add_api_route(
     "/auth/me/password", service.update_current_password, methods=["PUT"]
 )
+router.add_api_route("/auth/sessions", service.sessions, methods=["GET"])
+router.add_api_route(
+    "/auth/sessions/{session_id}", service.revoke_session, methods=["DELETE"]
+)
+router.add_api_route("/auth/sessions", service.revoke_all_sessions, methods=["DELETE"])
+router.add_api_route(
+    "/auth/email-verification/request",
+    account_recovery.request_email_verification,
+    methods=["POST"],
+    dependencies=[Depends(recovery_limit)],
+)
+router.add_api_route(
+    "/auth/email-verification/confirm",
+    account_recovery.confirm_email_verification,
+    methods=["POST"],
+    dependencies=[Depends(recovery_limit)],
+)
+router.add_api_route(
+    "/auth/phone-verification/request",
+    account_recovery.request_phone_verification,
+    methods=["POST"],
+    dependencies=[Depends(recovery_limit)],
+)
+router.add_api_route(
+    "/auth/phone-verification/confirm",
+    account_recovery.confirm_phone_verification,
+    methods=["POST"],
+    dependencies=[Depends(recovery_limit)],
+)
+router.add_api_route(
+    "/auth/password-reset/request",
+    account_recovery.request_password_reset,
+    methods=["POST"],
+    status_code=202,
+    dependencies=[Depends(recovery_limit)],
+)
+router.add_api_route(
+    "/auth/password-reset/confirm",
+    account_recovery.confirm_password_reset,
+    methods=["POST"],
+    dependencies=[Depends(recovery_limit)],
+)
 router.add_api_route(
     "/auth/browser/login",
     service.browser_login,
     methods=["POST"],
-    dependencies=[Depends(service.browser_origin)],
+    dependencies=[Depends(service.browser_origin), Depends(login_limit)],
 )
 router.add_api_route(
     "/auth/browser/register",
     service.browser_register,
     methods=["POST"],
-    dependencies=[Depends(service.browser_origin)],
+    dependencies=[Depends(service.browser_origin), Depends(registration_limit)],
 )
 router.add_api_route(
     "/auth/browser/google",
     service.browser_google,
     methods=["POST"],
-    dependencies=[Depends(service.browser_origin)],
+    dependencies=[Depends(service.browser_origin), Depends(login_limit)],
 )
 router.add_api_route(
     "/auth/browser/refresh",

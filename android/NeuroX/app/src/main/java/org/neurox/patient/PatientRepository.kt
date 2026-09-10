@@ -14,8 +14,19 @@ interface PatientRepository {
     suspend fun markReminderComplete(reminderId: String): ReminderItem
     suspend fun markReminderCompletedLocally(reminderId: String)
     suspend fun queueReminderUpdate(reminderId: String)
+    suspend fun updateReminderState(reminderId: String, status: String, snoozedUntil: String? = null): ReminderItem
+    suspend fun updateReminderStateLocally(reminderId: String, status: String, snoozedUntil: String? = null)
+    suspend fun queueReminderState(reminderId: String, status: String, snoozedUntil: String? = null)
     suspend fun sendSos(request: SosRequest): Map<String, Any>
     suspend fun queueSos(request: SosRequest, eventId: String = UUID.randomUUID().toString())
+    suspend fun privacy(): PrivacyState = PrivacyState()
+    suspend fun caregivers(): List<CaregiverAccess> = emptyList()
+    suspend fun setLocationSharing(enabled: Boolean): LocationSharingResponse =
+        error("Privacy controls are unavailable.")
+    suspend fun revokeCaregiver(caregiverId: String): RevocationResponse =
+        error("Privacy controls are unavailable.")
+    suspend fun setConsent(purpose: String, granted: Boolean): ConsentUpdateResponse =
+        error("Consent controls are unavailable.")
 }
 
 data class RemoteData(

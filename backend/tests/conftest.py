@@ -9,10 +9,13 @@ Each test module that needs a fresh database still manages its own TestClient
 fixture and tmp file cleanup.  This conftest simply guarantees that the env var
 is always set to a valid path before the first import happens.
 """
+
 import os
 import tempfile
 from pathlib import Path
 from uuid import uuid4
+
+os.environ.setdefault("BCRYPT_ROUNDS", "4")
 
 # Set a session-level default only if no URL has been provided already.
 # Individual test modules that need isolation may override this inside

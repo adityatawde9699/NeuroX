@@ -76,6 +76,17 @@ def set_consent(
             recorded_by=user.id,
         )
     )
+    if request.purpose == "location":
+        settings = db.get(SafetySettings, user.id)
+        if not settings:
+            settings = SafetySettings(patient_id=user.id)
+            db.add(settings)
+        settings.location_sharing_enabled = request.granted
+    if request.purpose == "caregiver_access" and not request.granted:
+        for assignment in db.query(CaregiverPatientAssignment).filter_by(
+            patient_id=user.id, active=True
+        ):
+            assignment.active = False
     audit(
         db,
         user.id,

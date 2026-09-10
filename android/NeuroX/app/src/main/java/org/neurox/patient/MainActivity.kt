@@ -1,6 +1,7 @@
 package org.neurox.patient
 
 import android.os.Bundle
+import android.os.Build
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.ComponentActivity
@@ -12,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -46,8 +48,8 @@ fun NeuroXApp() {
 
 @Composable
 fun PatientApp(repository: PatientRepository) {
-    var tab by remember { mutableIntStateOf(0) }
-    var showVoiceScreen by remember { mutableStateOf(false) }
+    var tab by rememberSaveable { mutableIntStateOf(0) }
+    var showVoiceScreen by rememberSaveable { mutableStateOf(false) }
     val viewModel: PatientViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
         key = repository.patientId(),
         factory = PatientViewModel.factory(repository),
@@ -55,6 +57,15 @@ fun PatientApp(repository: PatientRepository) {
     val ui by viewModel.state.collectAsState()
     LaunchedEffect(viewModel) { viewModel.refresh() }
     val context = LocalContext.current
+    val notificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> if (granted) ReminderScheduler.scheduleAll(context, ui.reminders) }
+    LaunchedEffect(ui.reminders) { ReminderScheduler.scheduleAll(context, ui.reminders) }
+    LaunchedEffect(ui.reminders.isNotEmpty()) {
+        if (ui.reminders.isNotEmpty() && Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
     val microphonePermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -125,6 +136,8 @@ fun PatientApp(repository: PatientRepository) {
             when {
                 ui.activeActivity == "memory-match" -> MemoryMatch(
                     Modifier.weight(1f),
+                    patientName = ui.patientName,
+                    onInterrupted = viewModel::recordInterruption,
                     onFinished = { attempts, responseTime, accuracy ->
                         viewModel.finish("memory-match", accuracy, responseTime, attempts)
                         tab = 1
@@ -132,8 +145,21 @@ fun PatientApp(repository: PatientRepository) {
                 )
                 ui.activeActivity == "object-recall" -> ObjectRecall(
                     Modifier.weight(1f),
+                    patientName = ui.patientName,
+                    onInterrupted = viewModel::recordInterruption,
                     onFinished = { attempts, responseTime, accuracy ->
                         viewModel.finish("object-recall", accuracy, responseTime, attempts)
+                        tab = 1
+                    },
+                )
+                ui.activeActivity in setOf("pattern", "sequence-recall", "daily-routine", "story-recall") -> GuidedChoiceActivity(
+                    modifier = Modifier.weight(1f),
+                    activityId = checkNotNull(ui.activeActivity),
+                    patientName = ui.patientName,
+                    onInterrupted = viewModel::recordInterruption,
+                    onFinished = { attempts, responseTime, accuracy ->
+                        val activityId = checkNotNull(ui.activeActivity)
+                        viewModel.finish(activityId, accuracy, responseTime, attempts)
                         tab = 1
                     },
                 )
@@ -162,6 +188,7 @@ fun PatientApp(repository: PatientRepository) {
                     Modifier.weight(1f),
                     reminders = ui.reminders,
                     onComplete = viewModel::completeReminder,
+                    onSnooze = viewModel::snoozeReminder,
                 )
                 tab == 3 -> Safety(
                     Modifier.weight(1f),
@@ -170,7 +197,12 @@ fun PatientApp(repository: PatientRepository) {
                     onSos = { viewModel.sendHelp() },
                 )
                 else -> Profile(Modifier.weight(1f), patientName = ui.patientName,
-                    patientAge = ui.patientAge, languageConfig = languageConfig)
+                    patientAge = ui.patientAge, languageConfig = languageConfig,
+                    privacy = ui.privacy, caregivers = ui.caregivers,
+                    privacyBusy = ui.privacyBusy, privacyMessage = ui.privacyMessage,
+                    onLocationSharingChanged = viewModel::setLocationSharing,
+                    onRevokeCaregiver = viewModel::revokeCaregiver,
+                    onConsentChanged = viewModel::setConsent)
             }
         }
     }

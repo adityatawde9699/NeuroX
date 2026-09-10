@@ -1,5 +1,5 @@
-import { api, endSession } from './client'
-import type { AuthResponse, AuthUser, Contact, LanguageConfig, Patient, PerformanceData, SafetyState } from '../types/dashboard'
+import { api, endSession, request } from './client'
+import type { AuthResponse, AuthUser, CaregiverPreferences, Contact, LanguageConfig, Patient, PerformanceData, Reminder, SafetyState, SecuritySession } from '../types/dashboard'
 
 export type ActivityReport = { patientId: string; summary: { sessions: number; completionRate: number; averageAccuracy: number; averageResponseTime: number; averageDifficulty: number }; series: Array<{date: string; completionRate: number; accuracy: number; responseTime: number; difficulty: number}>; note: string }
 export type ActivityHistory = { id: string; activityId: string; startedAt: string; completedAt: string | null; accuracy: number | null; responseTime: number | null; attempts: number; status: string; difficulty: number }
@@ -10,39 +10,52 @@ export const authApi = {
   login: (email: string, password: string) => api.post<AuthResponse>('/auth/browser/login', {email, password}),
   register: (name: string, email: string, password: string) => api.post<AuthResponse>('/auth/browser/register', {name, email, password, role: 'CAREGIVER'}),
   google: (credential: string) => api.post<AuthResponse>('/auth/browser/google', {credential}),
-  me: () => api.get<AuthUser>('/auth/me'),
+  me: () => api.get<AuthUser>('/api/v1/auth/me'),
   logout: endSession,
-  updateProfile: (name: string) => api.put<AuthUser>('/auth/me', {name}),
-  changePassword: (currentPassword: string, newPassword: string) => api.put<{updated: boolean}>('/auth/me/password', {current_password: currentPassword, new_password: newPassword}),
-  privacy: () => api.get<{locationSharingEnabled: boolean}>('/patients/me/privacy'),
-  setLocationSharing: (enabled: boolean) => api.put<{enabled: boolean; message: string}>('/patients/me/privacy/location-sharing', {enabled}),
-  caregivers: () => api.get<Array<{id: string; name: string; email: string}>>('/patients/me/caregivers'),
-  revokeCaregiver: (id: string) => api.delete(`/patients/me/caregivers/${id}`),
-  exportData: () => api.get('/patients/me/privacy/export'),
-  requestDeletion: () => api.post<{message: string}>('/patients/me/privacy/deletion-request', {}),
+  updateProfile: (name: string) => api.put<AuthUser>('/api/v1/auth/me', {name}),
+  changePassword: (currentPassword: string, newPassword: string) => api.put<{updated: boolean}>('/api/v1/auth/me/password', {current_password: currentPassword, new_password: newPassword}),
+  sessions: () => api.get<SecuritySession[]>('/api/v1/auth/sessions'),
+  revokeSession: (id: string) => api.delete<{revoked: boolean; session_id: string}>(`/api/v1/auth/sessions/${id}`),
+  requestEmailVerification: (accessToken?: string) => accessToken
+    ? request<{message: string}>('/api/v1/auth/email-verification/request', {method: 'POST', headers: {Authorization: `Bearer ${accessToken}`}, body: '{}'})
+    : api.post<{message: string}>('/api/v1/auth/email-verification/request', {}),
+  confirmEmailVerification: (token: string) => api.post<{verified: boolean}>('/api/v1/auth/email-verification/confirm', {token}),
+  requestPasswordReset: (email: string) => api.post<{message: string}>('/api/v1/auth/password-reset/request', {email}),
+  confirmPasswordReset: (token: string, newPassword: string) => api.post<{reset: boolean}>('/api/v1/auth/password-reset/confirm', {token, new_password: newPassword}),
+  preferences: () => api.get<CaregiverPreferences>('/api/v1/caregivers/me/preferences'),
+  updatePreferences: (payload: Partial<{available: boolean; notify_sos: boolean; notify_safety_alerts: boolean; notify_reminders: boolean}>) => api.put<CaregiverPreferences>('/api/v1/caregivers/me/preferences', payload),
+  privacy: () => api.get<{locationSharingEnabled: boolean}>('/api/v1/patients/me/privacy'),
+  setLocationSharing: (enabled: boolean) => api.put<{enabled: boolean; message: string}>('/api/v1/patients/me/privacy/location-sharing', {enabled}),
+  caregivers: () => api.get<Array<{id: string; name: string; email: string}>>('/api/v1/patients/me/caregivers'),
+  revokeCaregiver: (id: string) => api.delete(`/api/v1/patients/me/caregivers/${id}`),
+  exportData: () => api.get('/api/v1/patients/me/privacy/export'),
+  requestDeletion: () => api.post<{message: string}>('/api/v1/patients/me/privacy/deletion-request', {}),
 }
 
 export const dashboardApi = {
-  assignedPatients: () => api.get<Patient[]>('/caregivers/me/patients'),
-  patientMe: () => api.get<Patient>('/patients/me'),
-  patient: (patientId: string) => api.get<Patient>(`/patients/${patientId}`),
-  safety: (patientId: string) => api.get<SafetyState>(`/patients/${patientId}/safety`),
-  locationHistory: (patientId: string) => api.get<LocationHistoryItem[]>(`/patients/${patientId}/location-updates`),
-  performance: (patientId: string) => api.get<PerformanceData>(`/patients/${patientId}/performance`),
+  assignedPatients: () => api.get<Patient[]>('/api/v1/caregivers/me/patients'),
+  patientMe: () => api.get<Patient>('/api/v1/patients/me'),
+  patient: (patientId: string) => api.get<Patient>(`/api/v1/patients/${patientId}`),
+  safety: (patientId: string) => api.get<SafetyState>(`/api/v1/patients/${patientId}/safety`),
+  locationHistory: (patientId: string) => api.get<LocationHistoryItem[]>(`/api/v1/patients/${patientId}/location-updates`),
+  performance: (patientId: string) => api.get<PerformanceData>(`/api/v1/patients/${patientId}/performance`),
   report: (patientId: string, filters: {from?: string; to?: string; activityId?: string} = {}) => {
     const params = new URLSearchParams()
     if (filters.from) params.set('from', new Date(filters.from).toISOString())
     if (filters.to) params.set('to', new Date(filters.to).toISOString())
     if (filters.activityId) params.set('activity_id', filters.activityId)
     const query = params.toString()
-    return api.get<ActivityReport>(`/patients/${patientId}/reports/activity${query ? `?${query}` : ''}`)
+    return api.get<ActivityReport>(`/api/v1/patients/${patientId}/reports/activity${query ? `?${query}` : ''}`)
   },
-  history: (patientId: string) => api.get<ActivityHistory[]>(`/patients/${patientId}/activity-sessions`),
-  alerts: (patientId: string) => api.get<DashboardAlert[]>(`/patients/${patientId}/alerts?status=all`),
-  acknowledge: (patientId: string, kind: 'alert' | 'sos', id: string) => api.post(`/patients/${patientId}/${kind === 'sos' ? 'sos-events' : 'safety-alerts'}/${id}/acknowledge`, {note: 'Acknowledged from caregiver dashboard'}),
-  languages: () => api.get<LanguageConfig[]>('/language-config'),
-  updateSafetySettings: (patientId: string, payload: unknown) => api.put(`/patients/${patientId}/safety/settings`, payload),
-  contacts: (patientId: string) => api.get<Contact[]>(`/patients/${patientId}/emergency-contacts`),
-  createContact: (patientId: string, payload: unknown) => api.post<Contact>(`/patients/${patientId}/emergency-contacts`, payload),
-  updateContact: (patientId: string, contactId: string, payload: unknown) => api.put<Contact>(`/patients/${patientId}/emergency-contacts/${contactId}`, payload),
+  history: (patientId: string) => api.get<ActivityHistory[]>(`/api/v1/patients/${patientId}/activity-sessions`),
+  alerts: (patientId: string) => api.get<DashboardAlert[]>(`/api/v1/patients/${patientId}/alerts?status=all`),
+  acknowledge: (patientId: string, kind: 'alert' | 'sos', id: string) => api.post(`/api/v1/patients/${patientId}/${kind === 'sos' ? 'sos-events' : 'safety-alerts'}/${id}/acknowledge`, {note: 'Acknowledged from caregiver dashboard'}),
+  languages: () => api.get<LanguageConfig[]>('/api/v1/language-config'),
+  updateSafetySettings: (patientId: string, payload: unknown) => api.put(`/api/v1/patients/${patientId}/safety/settings`, payload),
+  contacts: (patientId: string) => api.get<Contact[]>(`/api/v1/patients/${patientId}/emergency-contacts`),
+  reminders: (patientId: string) => api.get<Reminder[]>(`/api/v1/patients/${patientId}/reminders`),
+  createReminder: (payload: unknown) => api.post<Reminder>('/api/v1/reminders', payload),
+  updateReminder: (reminderId: string, payload: unknown) => api.put<Reminder>(`/api/v1/reminders/${reminderId}`, payload),
+  createContact: (patientId: string, payload: unknown) => api.post<Contact>(`/api/v1/patients/${patientId}/emergency-contacts`, payload),
+  updateContact: (patientId: string, contactId: string, payload: unknown) => api.put<Contact>(`/api/v1/patients/${patientId}/emergency-contacts/${contactId}`, payload),
 }

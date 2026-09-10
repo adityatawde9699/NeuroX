@@ -41,16 +41,29 @@ class NeuroXRepository internal constructor(
     override suspend fun load(): RemoteData = withContext(Dispatchers.IO) {
         check(hasSession()) { "Please sign in first." }
         syncPendingEvents()
-        remote.load().also { local.save(it) }
+        val fresh = remote.load()
+        local.save(fresh)
+        // Screens always observe the same representation that is available offline.
+        local.load() ?: fresh
     }
 
     override suspend fun cachedData(): RemoteData? = local.load()
 
-    override suspend fun markReminderComplete(reminderId: String) = api.completeReminder(reminderId, mapOf("completed" to true))
+    override suspend fun markReminderComplete(reminderId: String) = api.updateReminder(reminderId, mapOf("status" to "done"))
     override suspend fun markReminderCompletedLocally(reminderId: String) = withContext(Dispatchers.IO) {
         offlineDatabase.offlineCacheDao().markReminderCompleted(reminderId)
+        offlineDatabase.checkpointBackup()
     }
-    override suspend fun startActivity(activity: ActivityItem, eventId: String, startedAt: String, offline: Boolean) = api.startActivity(activity.id, ActivityStartRequest(userId = patientId(), difficultyLevel = activity.difficulty, startedAt = startedAt, eventId = eventId, offlineCreated = offline))
+    override suspend fun updateReminderState(reminderId: String, status: String, snoozedUntil: String?) =
+        api.updateReminder(reminderId, mapOf("status" to status, "snoozed_until" to snoozedUntil))
+    override suspend fun updateReminderStateLocally(reminderId: String, status: String, snoozedUntil: String?) = withContext(Dispatchers.IO) {
+        offlineDatabase.offlineCacheDao().updateReminderState(reminderId, status == "done", status, snoozedUntil)
+        offlineDatabase.checkpointBackup()
+    }
+    override suspend fun queueReminderState(reminderId: String, status: String, snoozedUntil: String?) = queue(
+        SyncEventRequest(UUID.randomUUID().toString(), "reminder_update", patientId(), mapOf("reminder_id" to reminderId, "changes" to mapOf("status" to status, "snoozed_until" to snoozedUntil)))
+    )
+    override suspend fun startActivity(activity: ActivityItem, eventId: String, startedAt: String, offline: Boolean) = api.startActivity(activity.id, ActivityStartRequest(userId = patientId(), difficultyLevel = activity.difficulty, startedAt = startedAt, eventId = eventId, offlineCreated = offline, contentVersion = activity.contentVersion))
     override suspend fun completeActivity(activity: ActivityItem, request: ActivityCompletionRequest) = api.completeActivity(activity.id, request)
     override suspend fun queueActivityCompletion(request: ActivityCompletionRequest) = queue(
         SyncEventRequest(request.eventId, "activity_completion", patientId(), gson.fromJson(gson.toJson(request), object : TypeToken<Map<String, Any>>() {}.type))
@@ -65,6 +78,11 @@ class NeuroXRepository internal constructor(
         SyncEventRequest(eventId, "sos_event", patientId(), gson.fromJson(gson.toJson(request), object : TypeToken<Map<String, Any>>() {}.type))
     )
     override suspend fun sendSos(request: SosRequest) = api.sos(patientId(), request)
+    override suspend fun privacy() = api.privacy()
+    override suspend fun caregivers() = api.caregivers()
+    override suspend fun setLocationSharing(enabled: Boolean) = api.setLocationSharing(LocationSharingRequest(enabled))
+    override suspend fun revokeCaregiver(caregiverId: String) = api.revokeCaregiver(caregiverId)
+    override suspend fun setConsent(purpose: String, granted: Boolean) = api.setConsent(ConsentUpdateRequest(purpose, granted))
     suspend fun loadSafety() = api.safety(patientId())
     override fun schedulePendingSync() = enqueueSync()
     private suspend fun queue(event: SyncEventRequest) = withContext(Dispatchers.IO) {
@@ -78,6 +96,7 @@ class NeuroXRepository internal constructor(
                 status = "pending"
             )
         )
+        offlineDatabase.checkpointBackup()
         enqueueSync()
     }
     suspend fun syncPendingEvents(): SyncOutcome {

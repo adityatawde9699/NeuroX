@@ -8,6 +8,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import androidx.lifecycle.SavedStateHandle
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.*
@@ -86,6 +87,38 @@ class PatientViewModelTest {
         assertEquals(SyncState.Error, model.state.value.syncState)
     }
 
+    @Test fun offlineSnoozeIsQueuedAndShownLocally() = runTest {
+        val repository = FakePatientRepository().apply { offline = true }
+        val model = PatientViewModel(repository)
+        advanceUntilIdle()
+        model.snoozeReminder("reminder-1")
+        advanceUntilIdle()
+
+        val reminder = model.state.value.reminders.single()
+        assertEquals("snoozed", reminder.status)
+        assertNotNull(reminder.snoozedUntil)
+        assertEquals(listOf("queue-snoozed", "local-snoozed"), repository.reminderSteps)
+        assertEquals(1, model.state.value.pendingCount)
+    }
+
+    @Test fun completionRecordsContentVersionAndInterruptions() = runTest {
+        val repository = FakePatientRepository()
+        val model = PatientViewModel(repository)
+        advanceUntilIdle()
+        model.start(defaultActivities.first())
+        advanceUntilIdle()
+        model.recordInterruption()
+        model.recordInterruption()
+        model.finish("memory-match", .75f, 4f, 2)
+        advanceUntilIdle()
+
+        val completion = repository.completions.single()
+        assertEquals(defaultActivities.first().contentVersion, completion.contentVersion)
+        assertEquals(2, completion.interruptions)
+        assertEquals("large-touch", completion.accessibilityMode)
+        assertEquals("adaptive-v1", completion.modelVersion)
+    }
+
     @Test fun failedSosQueueShowsError() = runTest {
         val model = PatientViewModel(FakePatientRepository().apply { offline = true; queueFailure = true })
         advanceUntilIdle()
@@ -115,6 +148,50 @@ class PatientViewModelTest {
         assertEquals(5, model.state.value.activities.first().difficulty)
         assertEquals(SyncState.Synced, model.state.value.syncState)
     }
+
+    @Test fun patientCanDisableLocationSharing() = runTest {
+        val repository = FakePatientRepository().apply { locationSharing = true }
+        val model = PatientViewModel(repository)
+        advanceUntilIdle()
+        assertTrue(model.state.value.privacy.locationSharingEnabled)
+        model.setLocationSharing(false)
+        advanceUntilIdle()
+        assertFalse(model.state.value.privacy.locationSharingEnabled)
+        assertFalse(repository.locationSharing)
+    }
+
+    @Test fun patientCanRevokeCaregiverAccess() = runTest {
+        val repository = FakePatientRepository()
+        val model = PatientViewModel(repository)
+        advanceUntilIdle()
+        assertEquals(1, model.state.value.caregivers.size)
+        model.revokeCaregiver("caregiver-1")
+        advanceUntilIdle()
+        assertTrue(model.state.value.caregivers.isEmpty())
+        assertEquals("caregiver-1", repository.revokedCaregiver)
+    }
+
+    @Test fun patientCanWithdrawPersonalizationConsent() = runTest {
+        val repository = FakePatientRepository()
+        val model = PatientViewModel(repository)
+        advanceUntilIdle()
+        model.setConsent("personalization", false)
+        advanceUntilIdle()
+        assertFalse(model.state.value.privacy.consents.getValue("personalization").granted)
+        assertEquals("personalization" to false, repository.lastConsent)
+    }
+
+    @Test fun activeActivitySurvivesViewModelRecreation() = runTest {
+        val repository = FakePatientRepository()
+        val savedState = SavedStateHandle()
+        val first = PatientViewModel(repository, savedState)
+        advanceUntilIdle()
+        first.start(defaultActivities.first())
+        advanceUntilIdle()
+
+        val restored = PatientViewModel(repository, savedState)
+        assertEquals("memory-match", restored.state.value.activeActivity)
+    }
 }
 
 private class FakePatientRepository : PatientRepository {
@@ -128,6 +205,9 @@ private class FakePatientRepository : PatientRepository {
     var startGate: CompletableDeferred<Unit>? = null
     val completions = mutableListOf<ActivityCompletionRequest>()
     val reminderSteps = mutableListOf<String>()
+    var locationSharing = false
+    var revokedCaregiver: String? = null
+    var lastConsent: Pair<String, Boolean>? = null
     private val reminder = ReminderItem("reminder-1", "Water", "09:00", false)
     private val data = RemoteData(Patient("patient-1", "Test Patient", 70, "English"), defaultActivities, listOf(reminder))
 
@@ -150,12 +230,36 @@ private class FakePatientRepository : PatientRepository {
     }
     override suspend fun completeActivity(activity: ActivityItem, request: ActivityCompletionRequest): SyncResult {
         network()
+        completions.add(request)
         return SyncResult(nextDifficulty = 9)
     }
     override suspend fun queueActivityCompletion(request: ActivityCompletionRequest) { queue(); completions.add(request) }
     override suspend fun markReminderComplete(reminderId: String): ReminderItem { network(); return reminder.copy(completed = true) }
     override suspend fun markReminderCompletedLocally(reminderId: String) { reminderSteps.add("local") }
     override suspend fun queueReminderUpdate(reminderId: String) { queue(); reminderSteps.add("queue") }
+    override suspend fun updateReminderState(reminderId: String, status: String, snoozedUntil: String?): ReminderItem {
+        network(); return reminder.copy(completed = status == "done", status = status, snoozedUntil = snoozedUntil)
+    }
+    override suspend fun updateReminderStateLocally(reminderId: String, status: String, snoozedUntil: String?) {
+        reminderSteps.add("local-$status")
+    }
+    override suspend fun queueReminderState(reminderId: String, status: String, snoozedUntil: String?) {
+        queue(); reminderSteps.add("queue-$status")
+    }
     override suspend fun sendSos(request: SosRequest): Map<String, Any> { network(); return emptyMap() }
     override suspend fun queueSos(request: SosRequest, eventId: String) { queue() }
+    override suspend fun privacy() = PrivacyState(locationSharingEnabled = locationSharing)
+    override suspend fun caregivers() = listOf(CaregiverAccess("caregiver-1", "Test Caregiver", "caregiver@example.test"))
+    override suspend fun setLocationSharing(enabled: Boolean): LocationSharingResponse {
+        locationSharing = enabled
+        return LocationSharingResponse(enabled, "Location sharing updated.")
+    }
+    override suspend fun revokeCaregiver(caregiverId: String): RevocationResponse {
+        revokedCaregiver = caregiverId
+        return RevocationResponse(true, caregiverId)
+    }
+    override suspend fun setConsent(purpose: String, granted: Boolean): ConsentUpdateResponse {
+        lastConsent = purpose to granted
+        return ConsentUpdateResponse(purpose, granted, "phase1-v1")
+    }
 }

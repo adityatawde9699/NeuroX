@@ -1,9 +1,12 @@
-export type AuthUser = { id: string; name: string; email: string; role: string }
+export type AuthUser = { id: string; name: string; email: string; role: string; emailVerified?: boolean }
 export type AuthResponse = { access_token: string; user: AuthUser }
+export type SecuritySession = { id: string; created_at: string; last_used_at: string | null; expires_at: string; device_name: string }
+export type CaregiverPreferences = { available: boolean; notifySos: boolean; notifySafetyAlerts: boolean; notifyReminders: boolean; updatedAt: string }
 export type Patient = { id: string; name: string; email: string; age: number; preferredLanguage: string }
 export type PerformanceData = { patientId: string; completion: number[]; accuracyScores: number[]; responseTimes: number[]; difficultyProgression: number[]; difficulty: number; sessions: number; note: string }
 export type LanguageConfig = { languageCode: string; languageName: string; speechSupported: boolean; ttsSupported: boolean; ttsFallbackNote: string | null; bhashinSupported: boolean; bhashinNote: string | null }
 export type Contact = { id: string; name: string; phone: string; relationship: string; priority: number; active: boolean }
+export type Reminder = { id: string; patientId: string; type: 'medication'|'hydration'|'appointment'|'activity'|'exercise'; title: string; description: string|null; scheduledTime: string; repeatRule: string|null; enabled: boolean; completed: boolean; status: 'upcoming'|'snoozed'|'done'|'missed'; snoozedUntil: string|null; acknowledgedAt: string|null; timezoneName: string }
 export type SafetyLocation = { id: string; latitude: number; longitude: number; accuracyM: number; connectionState: string; capturedAt: string; freshness: string; label: string }
 export type SafetySettings = { safeZoneName: string; safeZoneLatitude: number | null; safeZoneLongitude: number | null; safeZoneRadiusM: number; expectedReturnAt: string | null; expectedReturnNote: string | null; lateReturnGraceMinutes: number }
 export type SafetyAlert = { id: string; type: string; severity: string; message: string; createdAt: string; escalatedToPriority: number; escalatedContact?: Contact | null }

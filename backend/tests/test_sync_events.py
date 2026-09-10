@@ -1,6 +1,7 @@
-﻿"""
+"""
 Phase 8 - Synchronization tests.
 """
+
 import os
 import tempfile
 from datetime import datetime, timedelta, timezone
@@ -13,7 +14,9 @@ from sqlalchemy.orm import Session
 
 if "DATABASE_URL" not in os.environ:
     _tmp = Path(tempfile.gettempdir())
-    os.environ["DATABASE_URL"] = f"sqlite:///{_tmp / f'neurox-sync-{uuid4().hex}.sqlite3'}"
+    os.environ["DATABASE_URL"] = (
+        f"sqlite:///{_tmp / f'neurox-sync-{uuid4().hex}.sqlite3'}"
+    )
 
 from app.main import app  # noqa: E402
 from app.database import engine
@@ -24,10 +27,12 @@ _PATIENT_PASSWORD = "NeuroXDemo!2026"
 _CAREGIVER_EMAIL = "anita@neurox.demo"
 _CAREGIVER_PASSWORD = "NeuroXDemo!2026"
 
+
 @pytest.fixture(scope="module")
 def client():
     with TestClient(app) as test_client:
         yield test_client
+
 
 @pytest.fixture(scope="module")
 def patient_headers(client):
@@ -37,6 +42,7 @@ def patient_headers(client):
     )
     assert resp.status_code == 200, resp.text
     return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
 
 @pytest.fixture(scope="module")
 def caregiver_headers(client):
@@ -48,20 +54,30 @@ def caregiver_headers(client):
         uid = uuid4().hex[:8]
         client.post(
             "/auth/register",
-            json={"name": f"CaregiverSync {uid}", "email": f"caregiver-sync-{uid}@neurox.test",
-                  "password": "SyncTest!1234", "role": "CAREGIVER"},
+            json={
+                "name": f"CaregiverSync {uid}",
+                "email": f"caregiver-sync-{uid}@neurox.test",
+                "password": "SyncTest!1234",
+                "role": "CAREGIVER",
+            },
         )
         resp = client.post(
             "/auth/login",
-            json={"email": f"caregiver-sync-{uid}@neurox.test", "password": "SyncTest!1234"},
+            json={
+                "email": f"caregiver-sync-{uid}@neurox.test",
+                "password": "SyncTest!1234",
+            },
         )
         assert resp.status_code == 200
         user_id = resp.json()["user"]["id"]
         with Session(engine) as db:
-            db.add(CaregiverPatientAssignment(caregiver_id=user_id, patient_id="maya-demo"))
+            db.add(
+                CaregiverPatientAssignment(caregiver_id=user_id, patient_id="maya-demo")
+            )
             db.commit()
     assert resp.status_code == 200, resp.text
     return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
 
 def _activity_event(event_id):
     now = datetime.now(timezone.utc)
@@ -79,24 +95,32 @@ def _activity_event(event_id):
             "difficulty_level": 2,
             "started_at": (now - timedelta(minutes=5)).isoformat(),
             "completed_at": now.isoformat(),
-            "completion_status": "completed"
+            "completion_status": "completed",
         },
     }
+
 
 def _sos_event(event_id, message="I need help."):
     return {
         "event_id": event_id,
         "event_type": "sos_event",
         "patient_id": "maya-demo",
-        "payload": {"message": message, "captured_at": datetime.now(timezone.utc).isoformat()},
+        "payload": {
+            "message": message,
+            "captured_at": datetime.now(timezone.utc).isoformat(),
+        },
     }
+
 
 def test_sync_activity_completion_creates_session(client, patient_headers):
     event_id = f"evt-{uuid4().hex}"
-    resp = client.post("/sync/events", json=[_activity_event(event_id)], headers=patient_headers)
+    resp = client.post(
+        "/sync/events", json=[_activity_event(event_id)], headers=patient_headers
+    )
     assert resp.status_code == 200, resp.text
     result = resp.json()
     assert result["results"][0]["status"] == "accepted"
+
 
 def test_sync_duplicate_event_is_idempotent(client, patient_headers):
     event_id = f"idem-{uuid4().hex}"
@@ -108,9 +132,12 @@ def test_sync_duplicate_event_is_idempotent(client, patient_headers):
     assert second.status_code == 200
     assert second.json()["results"][0]["status"] == "duplicate"
 
+
 def test_sync_sos_event_appears_in_safety(client, patient_headers, caregiver_headers):
     event_id = f"sos-{uuid4().hex}"
-    resp = client.post("/sync/events", json=[_sos_event(event_id)], headers=patient_headers)
+    resp = client.post(
+        "/sync/events", json=[_sos_event(event_id)], headers=patient_headers
+    )
     assert resp.status_code == 200, resp.text
     assert resp.json()["results"][0]["status"] == "accepted"
 
@@ -118,6 +145,7 @@ def test_sync_sos_event_appears_in_safety(client, patient_headers, caregiver_hea
     assert safety.status_code == 200
     sos_events = safety.json().get("sosEvents", [])
     assert len(sos_events) >= 1
+
 
 def test_location_update_accepted(client, patient_headers):
     now = datetime.now(timezone.utc)
@@ -134,6 +162,7 @@ def test_location_update_accepted(client, patient_headers):
     )
     assert resp.status_code == 201, resp.text
 
+
 def test_unrelated_caregiver_cannot_sync_for_patient(client):
     uid = uuid4().hex[:8]
     reg = client.post(
@@ -142,7 +171,7 @@ def test_unrelated_caregiver_cannot_sync_for_patient(client):
             "name": f"Intruder {uid}",
             "email": f"intruder-{uid}@neurox.test",
             "password": "IntruderPass!123",
-            "role": "CAREGIVER"
+            "role": "CAREGIVER",
         },
     )
     assert reg.status_code == 201, reg.text
@@ -156,7 +185,9 @@ def test_unrelated_caregiver_cannot_sync_for_patient(client):
     )
     if resp.status_code == 200:
         assert resp.json()["results"][0]["status"] == "rejected"
-        assert "not assigned to this patient" in resp.json()["results"][0]["detail"].lower()
+        assert (
+            "not assigned to this patient"
+            in resp.json()["results"][0]["detail"].lower()
+        )
     else:
         assert resp.status_code == 403
-

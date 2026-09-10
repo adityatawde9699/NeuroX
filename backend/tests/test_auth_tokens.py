@@ -1,4 +1,4 @@
-﻿"""
+"""
 Phase 8 - Authentication tests.
 
 Covers:
@@ -13,6 +13,7 @@ Covers:
 NOTE: All fixtures use freshly registered test users so this module
       is independent of demo-data state set by other test modules.
 """
+
 import os
 import tempfile
 from pathlib import Path
@@ -23,7 +24,9 @@ from fastapi.testclient import TestClient
 
 if "DATABASE_URL" not in os.environ:
     _tmp = Path(tempfile.gettempdir())
-    os.environ["DATABASE_URL"] = f"sqlite:///{_tmp / f'neurox-auth-{uuid4().hex}.sqlite3'}"
+    os.environ["DATABASE_URL"] = (
+        f"sqlite:///{_tmp / f'neurox-auth-{uuid4().hex}.sqlite3'}"
+    )
 
 from app.main import app  # noqa: E402
 
@@ -37,7 +40,11 @@ def client():
         # Register a fresh caregiver for this module.
         test_client.post(
             "/auth/register",
-            json={"name": "Auth Tester", "email": _TEST_EMAIL, "password": _TEST_PASSWORD},
+            json={
+                "name": "Auth Tester",
+                "email": _TEST_EMAIL,
+                "password": _TEST_PASSWORD,
+            },
         )
         yield test_client
 
@@ -85,27 +92,50 @@ def test_login_unknown_email_returns_401(client):
 @pytest.mark.parametrize("role", ["ADMIN", "HEALTHCARE_WORKER", "admin", "UNKNOWN"])
 def test_public_registration_rejects_privileged_roles(client, role):
     email = f"forbidden-{uuid4().hex}@neurox.test"
-    response = client.post("/auth/register", json={
-        "name": "Untrusted Registration", "email": email,
-        "password": _TEST_PASSWORD, "role": role,
-    })
+    response = client.post(
+        "/auth/register",
+        json={
+            "name": "Untrusted Registration",
+            "email": email,
+            "password": _TEST_PASSWORD,
+            "role": role,
+        },
+    )
     assert response.status_code == 422
-    assert client.post("/auth/login", json={
-        "email": email, "password": _TEST_PASSWORD,
-    }).status_code == 401
+    assert (
+        client.post(
+            "/auth/login",
+            json={
+                "email": email,
+                "password": _TEST_PASSWORD,
+            },
+        ).status_code
+        == 401
+    )
 
 
 @pytest.mark.parametrize("role", ["PATIENT", "CAREGIVER"])
 def test_public_registration_accepts_supported_roles(client, role):
-    response = client.post("/auth/register", json={
-        "name": "Supported Registration", "email": f"allowed-{uuid4().hex}@neurox.test",
-        "password": _TEST_PASSWORD, "role": role,
-    })
+    response = client.post(
+        "/auth/register",
+        json={
+            "name": "Supported Registration",
+            "email": f"allowed-{uuid4().hex}@neurox.test",
+            "password": _TEST_PASSWORD,
+            "role": role,
+        },
+    )
     assert response.status_code == 201
     token = response.json()["access_token"]
-    assert client.get("/auth/me", headers={
-        "Authorization": f"Bearer {token}",
-    }).json()["role"] == role
+    assert (
+        client.get(
+            "/auth/me",
+            headers={
+                "Authorization": f"Bearer {token}",
+            },
+        ).json()["role"]
+        == role
+    )
 
 
 # -------------------------------------------------------
@@ -165,7 +195,11 @@ def test_logout_then_refresh_fails(client):
     email = f"logout-test-{uid}@neurox.test"
     reg = client.post(
         "/auth/register",
-        json={"name": f"Logout Tester {uid}", "email": email, "password": "Logout!9876"},
+        json={
+            "name": f"Logout Tester {uid}",
+            "email": email,
+            "password": "Logout!9876",
+        },
     )
     assert reg.status_code == 201, reg.text
     tokens = reg.json()

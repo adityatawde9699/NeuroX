@@ -55,7 +55,7 @@ class SecureSessionTest {
             assertEquals("patient-1", patientApi(address, store).patient().id)
             assertEquals("Bearer expired", server.takeRequest().getHeader("Authorization"))
             val refresh = server.takeRequest()
-            assertEquals("/auth/refresh", refresh.path)
+            assertEquals("/api/v1/auth/refresh", refresh.path)
             assertNull(refresh.getHeader("Authorization"))
             assertEquals("Bearer fresh", server.takeRequest().getHeader("Authorization"))
             assertEquals("refresh-new", store.read()?.refreshToken)

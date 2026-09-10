@@ -32,6 +32,11 @@ def test_revision_roundtrip_preserves_patient_data(tmp_path, monkeypatch):
                     "INSERT INTO patients (user_id,age,preferred_language) VALUES ('p',68,'English')"
                 )
             )
+            db.execute(
+                sa.text(
+                    "INSERT INTO refresh_sessions (id,user_id,expires_at,revoked) VALUES ('existing-session','p',CURRENT_TIMESTAMP,0)"
+                )
+            )
         command.upgrade(config, "head")
         with engine.connect() as db:
             assert (
@@ -40,6 +45,24 @@ def test_revision_roundtrip_preserves_patient_data(tmp_path, monkeypatch):
                 ).scalar_one()
                 == 2
             )
+            assert (
+                db.execute(
+                    sa.text(
+                        "SELECT family_id FROM refresh_sessions WHERE id='existing-session'"
+                    )
+                ).scalar_one()
+                == "existing-session"
+            )
+            assert (
+                db.execute(
+                    sa.text("SELECT failed_login_attempts FROM users WHERE id='p'")
+                ).scalar_one()
+                == 0
+            )
+            assert db.execute(
+                sa.text("SELECT email_verified FROM users WHERE id='p'")
+            ).scalar_one()
+            assert "account_tokens" in sa.inspect(engine).get_table_names()
         command.downgrade(config, "20260907_001")
         with engine.connect() as db:
             assert (

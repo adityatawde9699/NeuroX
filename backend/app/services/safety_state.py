@@ -238,4 +238,3 @@ def evaluate_safety(patient_id: str, db: Session) -> None:
             item.escalated_to_priority = 2
             item.escalated_at = now_value
     db.commit()
-

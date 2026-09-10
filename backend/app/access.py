@@ -4,6 +4,7 @@ from fastapi import Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.audit import record
 from app.models import CaregiverPatientAssignment, User
 from app.services.authentication import current_user
 from app.schemas import Role
@@ -18,6 +19,12 @@ def caregiver_only(user: User = Depends(current_user)) -> User:
 def patient_only(user: User = Depends(current_user)) -> User:
     if user.role != Role.PATIENT.value:
         raise HTTPException(status_code=403, detail="Patient access is required.")
+    return user
+
+
+def admin_only(user: User = Depends(current_user)) -> User:
+    if user.role != Role.ADMIN.value:
+        raise HTTPException(status_code=403, detail="Administrator access is required.")
     return user
 
 
@@ -43,4 +50,12 @@ def patient_access(
         raise HTTPException(
             status_code=403, detail="You are not assigned to this patient."
         )
+    record(
+        db,
+        actor_id=user.id,
+        patient_id=patient_id,
+        action="patient_data.accessed",
+        target_id=patient_id,
+    )
+    db.commit()
     return user

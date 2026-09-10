@@ -6,6 +6,7 @@ Covers:
   Phase 3 — /performance route structure, /reports/activity summary + series,
              date-filter on activity report, next_difficulty persistence after completion.
 """
+
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -65,13 +66,21 @@ def test_activity_list_requires_auth(client):
     assert client.get("/activities").status_code == 401
 
 
-def test_activity_list_returns_all_three(client, patient_headers):
+def test_activity_list_returns_all_six(client, patient_headers):
     resp = client.get("/activities", headers=patient_headers)
     assert resp.status_code == 200
     data = resp.json()
-    assert len(data) == 3
+    assert len(data) == 6
     ids = {item["id"] for item in data}
-    assert ids == {"memory-match", "object-recall", "pattern"}
+    assert ids == {
+        "memory-match",
+        "object-recall",
+        "pattern",
+        "sequence-recall",
+        "daily-routine",
+        "story-recall",
+    }
+    assert all(item["contentVersion"] == "2026.09-v1" for item in data)
 
 
 # ─────────────────────────────────────────────
@@ -88,7 +97,9 @@ def test_patient_can_read_own_reminders(client, patient_headers):
     assert "medication" in types
 
 
-def test_caregiver_can_read_assigned_patient_reminders(client, caregiver_headers, patient_headers):
+def test_caregiver_can_read_assigned_patient_reminders(
+    client, caregiver_headers, patient_headers
+):
     """The seeded caregiver (Anita) is assigned to Maya — use patient login to verify
     that the reminder list is readable by someone with access."""
     # The fresh caregiver has no assignment; use patient_headers to verify the endpoint works.
@@ -192,6 +203,11 @@ def _complete_one_activity(client, patient_headers) -> str:
         "difficulty_level": 2,
         "offline_created": False,
         "event_id": event_id,
+        "content_version": "2026.09-v1",
+        "interruptions": 2,
+        "accessibility_mode": "large-touch",
+        "app_version": "0.1",
+        "model_version": "adaptive-v1",
     }
     resp = client.post(
         "/activities/memory-match/complete",
@@ -211,6 +227,14 @@ def test_activity_history_grows_after_completion(client, patient_headers):
         "/patients/maya-demo/activity-sessions", headers=patient_headers
     ).json()
     assert len(after) == len(before) + 1
+    latest = next(
+        item for item in after if item["id"] not in {row["id"] for row in before}
+    )
+    assert latest["contentVersion"] == "2026.09-v1"
+    assert latest["interruptions"] == 2
+    assert latest["accessibilityMode"] == "large-touch"
+    assert latest["appVersion"] == "0.1"
+    assert latest["modelVersion"] == "adaptive-v1"
 
 
 # ─────────────────────────────────────────────
@@ -260,9 +284,7 @@ def test_performance_route_returns_data_after_session(client, patient_headers):
 
 def test_activity_report_has_summary_and_series(client, patient_headers):
     _complete_one_activity(client, patient_headers)
-    resp = client.get(
-        "/patients/maya-demo/reports/activity", headers=patient_headers
-    )
+    resp = client.get("/patients/maya-demo/reports/activity", headers=patient_headers)
     assert resp.status_code == 200
     data = resp.json()
     assert "summary" in data

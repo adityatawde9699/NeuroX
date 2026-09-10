@@ -180,9 +180,15 @@ Deploy the API at the host root and serve the dashboard/API on the same site
 cookie path is `/auth/browser`; a cross-site deployment or API path-prefix proxy
 needs a reviewed cookie/proxy configuration. Configure `CORS_ORIGINS` with the
 exact dashboard origin. `APP_ENV=staging` or `production` requires PostgreSQL,
-explicit HTTPS origins, and a non-placeholder JWT secret of at least 32 characters.
+explicit HTTPS origins, a non-placeholder JWT secret of at least 32 characters,
+`PUBLIC_WEB_URL`, `SMTP_HOST`, and `SMTP_FROM`.
 Those environments neither create tables nor seed demo accounts at startup;
 run Alembic migrations before starting the service.
+
+Password-reset and email-verification links are single-use, expire, and are
+stored only as SHA-256 digests. SMTP credentials stay in server environment
+variables. Staging and production enforce email verification; local development
+can opt in with `REQUIRE_EMAIL_VERIFICATION=true`.
 
 ### Google sign-in setup
 
@@ -250,6 +256,22 @@ Use JDK 17 for the Android Gradle build. HTTP access to the emulator's local
 backend is permitted only in debug builds; release builds reject cleartext
 traffic. The Android setup/sign-in flow and encrypted session storage are
 implemented; the broader production gates in `PLAN.md` remain open.
+
+## Phase 2 platform foundation
+
+The repository now includes versioned APIs, hardened account/session recovery,
+Redis rate limits, phone and email verification adapters, administrator controls,
+immutable audit events, retention/deletion work, device-labeled sessions, and
+PII-minimal metrics/logging with optional OTLP tracing. The Android app adds
+restricted TLS, Room-backed reads, saved activity state, battery-aware sync, and
+reboot/time-change recovery. The dashboard adds an error boundary, shared query
+caching, preferences, availability, and session revocation.
+
+The deployable reference stack and backup/restore runbook are in
+[`deploy/README.md`](deploy/README.md). These files complete the repository-side
+foundation; production deployment, managed PostgreSQL PITR, restore evidence,
+alert delivery, load/SLO measurement, and real-device reliability remain explicit
+operational acceptance gates.
 
 ### Backend tests
 

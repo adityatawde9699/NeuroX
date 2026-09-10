@@ -1,11 +1,20 @@
 package org.neurox.patient
 
 import okhttp3.OkHttpClient
+import okhttp3.ConnectionSpec
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
 fun patientApi(server: String, sessions: SecureSessionStore? = null): NeuroXApi {
     val client = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false)
+        .addInterceptor { chain ->
+            chain.proceed(chain.request().newBuilder()
+                .header("X-Client-Name", "NeuroX Android")
+                .build())
+        }
+    if (server.startsWith("https://")) {
+        client.connectionSpecs(listOf(ConnectionSpec.RESTRICTED_TLS))
+    }
     if (sessions != null) {
         client.addInterceptor { chain ->
             val session = sessions.read()

@@ -1,6 +1,7 @@
 package org.neurox.patient
 
 import android.content.Context
+import android.database.sqlite.SQLiteException
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
@@ -10,6 +11,7 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import java.io.File
 
 @Entity(tableName = "pending_sync_events")
 data class PendingSyncEntity(
@@ -38,6 +40,7 @@ data class CachedActivityEntity(
     val title: String,
     val description: String,
     val difficulty: Int,
+    val contentVersion: String,
     val fetchedAt: Long
 )
 
@@ -48,6 +51,12 @@ data class CachedReminderEntity(
     val scheduledTime: String,
     val completed: Boolean,
     val description: String?,
+    val type: String,
+    val repeatRule: String?,
+    val enabled: Boolean,
+    val status: String,
+    val snoozedUntil: String?,
+    val timezoneName: String,
     val fetchedAt: Long
 )
 
@@ -104,6 +113,12 @@ interface OfflineCacheDao {
     @Query("UPDATE cached_reminders SET completed = 1 WHERE id = :reminderId")
     suspend fun markReminderCompleted(reminderId: String)
 
+    @Query("UPDATE cached_reminders SET completed = :completed, status = :status, snoozedUntil = :snoozedUntil WHERE id = :reminderId")
+    suspend fun updateReminderState(reminderId: String, completed: Boolean, status: String, snoozedUntil: String?)
+
+    @Query("SELECT * FROM cached_reminders WHERE id = :reminderId LIMIT 1")
+    suspend fun reminder(reminderId: String): CachedReminderEntity?
+
     @Query("SELECT * FROM cached_snapshots WHERE category = :category LIMIT 1")
     suspend fun snapshot(category: String): CachedSnapshotEntity?
 
@@ -111,20 +126,58 @@ interface OfflineCacheDao {
     suspend fun saveSnapshot(snapshot: CachedSnapshotEntity)
 }
 
-@Database(entities = [PendingSyncEntity::class, CachedPatientEntity::class, CachedActivityEntity::class, CachedReminderEntity::class, CachedSnapshotEntity::class], version = 4, exportSchema = false)
+@Database(entities = [PendingSyncEntity::class, CachedPatientEntity::class, CachedActivityEntity::class, CachedReminderEntity::class, CachedSnapshotEntity::class], version = 6, exportSchema = false)
 abstract class OfflineDatabase : androidx.room.RoomDatabase() {
     abstract fun pendingSyncDao(): PendingSyncDao
     abstract fun offlineCacheDao(): OfflineCacheDao
+
+    /** Keep a checkpointed last-known-good copy for bounded corruption recovery. */
+    fun checkpointBackup() {
+        openHelper.writableDatabase.query("PRAGMA wal_checkpoint(FULL)").close()
+        val source = File(
+            checkNotNull(openHelper.writableDatabase.path) { "Offline database path is unavailable." }
+        )
+        val backup = File("${source.path}.backup")
+        val temporary = File("${backup.path}.tmp")
+        source.copyTo(temporary, overwrite = true)
+        check(temporary.renameTo(backup)) { "Could not finalize offline database backup." }
+    }
 
     companion object {
         @Volatile private var instance: OfflineDatabase? = null
 
         fun get(context: Context): OfflineDatabase = instance ?: synchronized(this) {
-            instance ?: Room.databaseBuilder(
+            instance ?: openWithRecovery(context.applicationContext).also { instance = it }
+        }
+
+        private fun build(context: Context) = Room.databaseBuilder(
                 context.applicationContext,
                 OfflineDatabase::class.java,
                 "neurox-offline.db"
-            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build().also { instance = it }
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6).build()
+
+        private fun openWithRecovery(context: Context): OfflineDatabase {
+            val candidate = build(context)
+            try {
+                candidate.openHelper.writableDatabase
+                return candidate
+            } catch (error: SQLiteException) {
+                candidate.close()
+                val database = context.getDatabasePath("neurox-offline.db")
+                val backup = File("${database.path}.backup")
+                if (!backup.isFile) throw error
+                File("${database.path}-wal").delete()
+                File("${database.path}-shm").delete()
+                backup.copyTo(database, overwrite = true)
+                val recovered = build(context)
+                recovered.openHelper.writableDatabase
+                return recovered
+            }
+        }
+
+        internal fun closeForTest() = synchronized(this) {
+            instance?.close()
+            instance = null
         }
 
         private val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -146,6 +199,23 @@ abstract class OfflineDatabase : androidx.room.RoomDatabase() {
         private val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL("CREATE TABLE IF NOT EXISTS cached_snapshots (category TEXT NOT NULL PRIMARY KEY, payloadJson TEXT NOT NULL, fetchedAt INTEGER NOT NULL)")
+            }
+        }
+
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE cached_activities ADD COLUMN contentVersion TEXT NOT NULL DEFAULT 'legacy'")
+            }
+        }
+
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE cached_reminders ADD COLUMN type TEXT NOT NULL DEFAULT 'activity'")
+                database.execSQL("ALTER TABLE cached_reminders ADD COLUMN repeatRule TEXT")
+                database.execSQL("ALTER TABLE cached_reminders ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1")
+                database.execSQL("ALTER TABLE cached_reminders ADD COLUMN status TEXT NOT NULL DEFAULT 'upcoming'")
+                database.execSQL("ALTER TABLE cached_reminders ADD COLUMN snoozedUntil TEXT")
+                database.execSQL("ALTER TABLE cached_reminders ADD COLUMN timezoneName TEXT NOT NULL DEFAULT 'Asia/Kolkata'")
             }
         }
     }

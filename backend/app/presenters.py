@@ -14,6 +14,10 @@ def public_reminder(reminder: Reminder) -> dict:
         "repeatRule": reminder.repeat_rule,
         "enabled": reminder.enabled,
         "completed": reminder.completed,
+        "status": reminder.status,
+        "snoozedUntil": reminder.snoozed_until,
+        "acknowledgedAt": reminder.acknowledged_at,
+        "timezoneName": reminder.timezone_name,
     }
 
 

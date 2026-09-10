@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.ai.personalization.adaptive_difficulty import (
     PerformanceInput,
@@ -65,6 +65,10 @@ def start_activity(
         started_at=session.started_at,
         difficulty_level=session.difficulty_level,
         offline_created=session.offline_created,
+        content_version=session.content_version,
+        accessibility_mode=session.accessibility_mode,
+        app_version=session.app_version,
+        model_version=session.model_version,
     )
     db.add(activity_session)
     db.commit()
@@ -116,6 +120,10 @@ def complete_activity(
             started_at=session.started_at,
             difficulty_level=session.difficulty_level,
             offline_created=session.offline_created,
+            content_version=session.content_version,
+            accessibility_mode=session.accessibility_mode,
+            app_version=session.app_version,
+            model_version=session.model_version,
         )
         db.add(activity_session)
     activity_session.completed_at = session.completed_at
@@ -123,6 +131,11 @@ def complete_activity(
     activity_session.response_time = session.response_time
     activity_session.attempts = session.attempts
     activity_session.completion_status = session.completion_status
+    activity_session.content_version = session.content_version
+    activity_session.interruptions = session.interruptions
+    activity_session.accessibility_mode = session.accessibility_mode
+    activity_session.app_version = session.app_version
+    activity_session.model_version = session.model_version
     db.commit()
     history_rows = (
         db.query(ActivitySession)
@@ -169,13 +182,18 @@ def complete_activity(
 
 # Get a patient's activity history
 def activity_history(
-    patient_id: str, _: User = Depends(patient_access), db: Session = Depends(get_db)
+    patient_id: str,
+    limit: int = Query(default=30, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    _: User = Depends(patient_access),
+    db: Session = Depends(get_db),
 ):
     sessions = (
         db.query(ActivitySession)
         .filter(ActivitySession.user_id == patient_id)
         .order_by(ActivitySession.started_at.desc())
-        .limit(30)
+        .offset(offset)
+        .limit(limit)
         .all()
     )
     return [
@@ -189,6 +207,11 @@ def activity_history(
             "attempts": item.attempts,
             "status": item.completion_status,
             "difficulty": item.difficulty_level,
+            "contentVersion": item.content_version,
+            "interruptions": item.interruptions,
+            "accessibilityMode": item.accessibility_mode,
+            "appVersion": item.app_version,
+            "modelVersion": item.model_version,
         }
         for item in sessions
     ]

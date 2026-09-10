@@ -120,6 +120,25 @@ def test_patient_can_control_consent_location_and_caregiver_access():
             ).status_code
             == 403
         )
+        with SessionLocal() as db:
+            db.get(CaregiverPatientAssignment, (caregiver_id, patient_id)).active = True
+            db.commit()
+        withdrawn = client.put(
+            "/patients/me/privacy/consents",
+            headers=patient_headers,
+            json={
+                "purpose": "caregiver_access",
+                "granted": False,
+                "notice_version": "test-v1",
+            },
+        )
+        assert withdrawn.status_code == 200
+        assert (
+            client.get(
+                f"/patients/{patient_id}/safety", headers=headers(caregiver)
+            ).status_code
+            == 403
+        )
         assert (
             client.get(
                 "/patients/me/privacy/export", headers=patient_headers

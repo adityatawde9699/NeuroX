@@ -1,6 +1,6 @@
 # Implementation progress
 
-Updated: 2026-09-09. This records implementation evidence against `PLAN.md`;
+Updated: 2026-09-10. This records implementation evidence against `PLAN.md`;
 the existing production plan remains the source of priorities.
 
 ## First milestone: Phase 0 build and security foundation
@@ -102,11 +102,11 @@ the existing production plan remains the source of priorities.
 
 ## Current verification
 
-- Backend: 114 tests pass, including Phase 1 consent, location-sharing,
-  caregiver-revocation, data-export, deletion-request, and audit-trail checks.
-- Dashboard: 35 tests pass; production build and TypeScript checks pass.
-- Android: 13 JVM tests pass; debug/release APKs and instrumentation APK compile.
-  Lint has zero errors and 15 warnings.
+- Backend: 146 tests pass, including Phase 1 privacy checks and Phase 2 API
+  versioning, readiness, error-envelope, request-ID, and pagination checks.
+- Dashboard: 44 tests pass; production build and TypeScript checks pass.
+- Android: 19 JVM tests pass; debug/release APKs and instrumentation APK compile.
+  Lint has no errors; it reports dependency/target-SDK update warnings.
 - PostgreSQL 18.6: upgrade/rollback and existing patient-data preservation pass
   against isolated disposable databases. The temporary server has been stopped.
   PostgreSQL 16 remains configured as the remote CI migration target.
@@ -141,7 +141,8 @@ implemented or tested. The broader pilot/production gates in PLAN.md remain open
 - Patients can immediately revoke an active caregiver assignment; every
   subsequent protected read or mutation by that caregiver is denied. The patient
   web safety screen exposes location sharing, caregiver revocation, data export,
-  and deletion-request controls.
+  and deletion-request controls. Android Profile now also exposes location sharing
+  and caregiver revocation with observable ViewModel state.
 - Data export is available as a browser-downloaded JSON record. Deletion requests
   are deliberately recorded for review rather than automatically erasing data:
   retention, legal review, and approved operational handling are still required.
@@ -149,3 +150,118 @@ implemented or tested. The broader pilot/production gates in PLAN.md remain open
   approved retention/deletion policy, incident-response ownership, and an approved
   pilot protocol require real people and external approval. They are not claimed
   complete by this implementation.
+
+## Phase 2 implementation status
+
+- A stable `/api/v1` surface now covers native authentication and application
+  resources. Legacy routes remain available during client migration. Browser
+  session endpoints deliberately stay under `/auth/browser/*` so the refresh
+  cookie retains its narrow path scope.
+- Android and dashboard resource clients use `/api/v1`. Browser sign-in,
+  registration, refresh, and logout continue to use the cookie-scoped endpoints.
+- Every response carries a validated or generated `X-Request-ID`. HTTP and
+  validation failures expose a consistent error object while retaining the
+  existing `detail` field for backward compatibility; unexpected failures do
+  not expose internal exception details.
+- Liveness and database-readiness probes are available at `/health` and `/ready`.
+  Activity history, reminders, and location history have bounded `limit` and
+  `offset` query parameters.
+- OpenAPI contract tests protect the core versioned paths and operation-ID
+  uniqueness. Backend, dashboard, and Android local verification all pass after
+  the client migration.
+- Password sign-in now persists failed-attempt counts and applies a timed account
+  lock after five failures. Successful authentication after the lock expires
+  clears the failure state, and lock responses include `Retry-After`.
+- Refresh sessions are grouped into rotation families. Reusing a consumed token
+  revokes every active replacement in that family and records a content-minimal
+  audit event. Password changes revoke all of the account's refresh sessions.
+- Account owners can list and revoke their active sessions through `/api/v1`.
+  The caregiver Settings screen exposes those controls and does not rely on
+  frontend visibility for authorization.
+- Email verification and password reset use cryptographically random, expiring,
+  single-use tokens; only token digests are stored. Reset requests return the
+  same response for known and unknown emails, successful resets clear lockouts
+  and revoke existing sessions, and both workflows create minimal audit events.
+- SMTP delivery is isolated behind a server-only adapter. Staging and production
+  require SMTP sender configuration and an exact HTTPS public web origin, and
+  enforce email verification. The dashboard implements forgot-password, reset,
+  and verification-link screens.
+- Phone verification uses six-digit, ten-minute, one-use codes whose HMAC digests
+  are stored instead of the raw code. A provider-neutral HTTPS SMS adapter keeps
+  provider credentials server-side. Sessions retain bounded client labels so the
+  dashboard can show and revoke recognizable Android/web sessions.
+- Authentication and recovery endpoints have distributed Redis rate limiting in
+  staging/production and a deterministic in-memory test/development backend.
+  Redis failure closes protected endpoints rather than silently disabling limits.
+- Administrative APIs enforce the administrator role for assignment changes,
+  privacy-request review, and audit access. Database and ORM safeguards make audit
+  records append-only; patient access, consent/assignment, safety settings,
+  acknowledgements, and administrative actions emit content-minimal events.
+- The maintenance worker expires retained authentication records and executes only
+  administrator-approved deletion requests, pseudonymizing the account while
+  transactionally removing patient-domain records. JWT `kid` headers and previous
+  signing secrets support controlled signing-key rollover.
+- The production reference topology includes Caddy HTTPS termination, controlled
+  migrations, PostgreSQL, Redis, a worker, object storage, external secret mounts,
+  OTLP tracing, Prometheus metrics, and starter availability/error-rate alerts.
+  Encrypted `age` backup and guarded restore-drill scripts are documented in
+  `deploy/README.md`; the compose database deliberately makes no false PITR claim.
+- Android now uses restricted modern TLS for HTTPS, battery-aware exponential sync
+  retry, reboot/time/time-zone rescheduling, saved activity/navigation state, and
+  Room-backed screen reads. Compiled instrumentation tests verify the complete
+  Room 1-to-4 migration preserves an offline queued event and recovery restores a
+  checkpointed last-known-good database instead of silently discarding the queue.
+- The dashboard has an application error boundary, a shared React Query cache,
+  caregiver availability/notification preferences, relationship controls, and
+  labeled device/session management. Backend authorization remains authoritative.
+
+## Phase 2 acceptance status
+
+All Phase 2 work that can be implemented and locally verified in this repository
+is present. Phase 2 is **implementation-complete but not operationally accepted**.
+Acceptance still requires deploying the reference topology in separate staging and
+production environments and recording real evidence for HTTPS, managed secrets,
+SMS/email delivery, Redis behavior, telemetry/alert delivery, encrypted restore,
+managed PostgreSQL point-in-time recovery, expected-load latency, uptime, and
+Android device/emulator recovery. The 99.5% availability/crash-free targets and
+P95 latency targets require measured pilot data; source code cannot prove them.
+
+## Phase 3 implementation status
+
+- The backend and Android catalog now contain all six planned activities:
+  Memory Match, Object Recall, Pattern Completion, Sequence Recall, Daily Routine
+  Recall, and Story Recall. Each flow has an introduction, practice step,
+  pause/resume, simple progress, supportive correction, and calm completion.
+- Activity UI state uses saveable Compose state and the active activity/event is
+  retained by `SavedStateHandle`. Room retains the catalog content version for
+  offline use. Completion records now include event ID, content version,
+  difficulty, timestamps, attempts, accuracy, response time, completion state,
+  interruptions, accessibility mode, offline origin, and app/model versions.
+- Reminder records now carry upcoming/snoozed/done/missed state, acknowledgement
+  time, snooze time, repeat rule, enabled state, and IANA time zone. Android uses
+  WorkManager and separate notification channels for medication, hydration,
+  appointment, and activity reminders, restores schedules after reboot/time-zone
+  changes, and supports offline Snooze and Done actions with later sync.
+- Patients cannot create or alter medication schedules. An assigned caregiver or
+  administrator must confirm those operations, and confirmations create minimal
+  audit events. Medication copy explicitly avoids dosage advice and does not
+  infer consumption from the Done action.
+- The caregiver web has a patient-scoped reminder page for one-time, daily, and
+  weekly schedules. Medication creation requires an explicit confirmation, and
+  enabling or disabling an existing medication reminder requires reconfirmation.
+- Patient reminder controls and game actions use 56dp-or-larger targets. Compose
+  tests cover the guided practice/pause/correction/completion path and reminder
+  action sizing; JVM tests cover offline snooze and complete activity metadata.
+- `PHASE3_CONTENT_REVIEW.md` registers all current content as prototype-only and
+  lists the required NER community, language, accessibility, and clinical-safety
+  review before pilot use.
+
+## Phase 3 acceptance status
+
+Phase 3 is **in progress**. Repository implementation covers the six activity
+flows, state capture, and the core reminder lifecycle. It is not accepted until
+the content and language review is approved and representative-device sessions
+verify TalkBack, font scaling, tremor/imprecise touch, low vision, hearing needs,
+cognitive load, process death, reboot restoration, and sustained offline use.
+The instrumentation tests compile locally but still require an Android device or
+emulator to execute.

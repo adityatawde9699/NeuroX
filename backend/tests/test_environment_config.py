@@ -9,10 +9,40 @@ import pytest
 CONFIG = Path(__file__).parents[1] / "app" / "config.py"
 
 
-@pytest.mark.parametrize("origin", ["", "http://care.example", "https://*.example", "https://care.example/path", "https://user:secret@care.example"])
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "",
+        "http://care.example",
+        "https://*.example",
+        "https://care.example/path",
+        "https://user:secret@care.example",
+    ],
+)
 def test_deployment_requires_exact_https_origins(monkeypatch, origin):
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("CORS_ORIGINS", origin)
+    with pytest.raises(RuntimeError):
+        runpy.run_path(str(CONFIG))
+
+
+@pytest.mark.parametrize("missing", ["SMTP_HOST", "SMTP_FROM", "PUBLIC_WEB_URL"])
+def test_deployment_requires_account_email_configuration(monkeypatch, missing):
+    values = {
+        "SMTP_HOST": "smtp.example",
+        "SMTP_FROM": "no-reply@example.com",
+        "PUBLIC_WEB_URL": "https://care.example",
+        "REDIS_URL": "redis://redis:6379/0",
+        "SMS_GATEWAY_URL": "https://sms.example/messages",
+        "SMS_GATEWAY_TOKEN": "test-provider-token",
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://otel:4318",
+    }
+    values.pop(missing)
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("CORS_ORIGINS", "https://care.example")
+    for key, value in values.items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.delenv(missing, raising=False)
     with pytest.raises(RuntimeError):
         runpy.run_path(str(CONFIG))
 
@@ -23,13 +53,54 @@ def test_unknown_environment_is_rejected(monkeypatch):
         runpy.run_path(str(CONFIG))
 
 
-@pytest.mark.parametrize("module,overrides,expected", [
-    ("app.auth", {"JWT_SECRET": "short"}, "JWT_SECRET"),
-    ("app.auth", {"JWT_SECRET": "replace-with-a-long-random-secret"}, "JWT_SECRET"),
-    ("app.database", {"DATABASE_URL": "sqlite:///unused.db"}, "PostgreSQL DATABASE_URL"),
-])
-def test_deployment_rejects_unsafe_credentials_and_database(module, overrides, expected):
-    env = {**os.environ, "APP_ENV": "production", "CORS_ORIGINS": "https://care.example", **overrides}
-    result = subprocess.run([sys.executable, "-c", f"import {module}"], env=env, capture_output=True, text=True, timeout=15)
+@pytest.mark.parametrize(
+    "module,overrides,expected",
+    [
+        ("app.auth", {"JWT_SECRET": "short"}, "JWT_SECRET"),
+        ("app.auth", {"JWT_SECRET": "replace-with-a-long-random-secret"}, "JWT_SECRET"),
+        (
+            "app.database",
+            {"DATABASE_URL": "sqlite:///unused.db"},
+            "PostgreSQL DATABASE_URL",
+        ),
+    ],
+)
+def test_deployment_rejects_unsafe_credentials_and_database(
+    module, overrides, expected
+):
+    env = {
+        **os.environ,
+        "APP_ENV": "production",
+        "CORS_ORIGINS": "https://care.example",
+        "SMTP_HOST": "smtp.example",
+        "SMTP_FROM": "no-reply@example.com",
+        "PUBLIC_WEB_URL": "https://care.example",
+        "REDIS_URL": "redis://redis:6379/0",
+        "SMS_GATEWAY_URL": "https://sms.example/messages",
+        "SMS_GATEWAY_TOKEN": "test-provider-token",
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://otel:4318",
+        **overrides,
+    }
+    result = subprocess.run(
+        [sys.executable, "-c", f"import {module}"],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
     assert result.returncode != 0
     assert expected in result.stderr
+
+
+def test_deployment_requires_redis(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("CORS_ORIGINS", "https://care.example")
+    monkeypatch.setenv("SMTP_HOST", "smtp.example")
+    monkeypatch.setenv("SMTP_FROM", "no-reply@example.com")
+    monkeypatch.setenv("PUBLIC_WEB_URL", "https://care.example")
+    monkeypatch.setenv("SMS_GATEWAY_URL", "https://sms.example/messages")
+    monkeypatch.setenv("SMS_GATEWAY_TOKEN", "test-provider-token")
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel:4318")
+    monkeypatch.delenv("REDIS_URL", raising=False)
+    with pytest.raises(RuntimeError, match="REDIS_URL"):
+        runpy.run_path(str(CONFIG))

@@ -72,7 +72,9 @@ def test_logout_revokes_refresh_session(client):
     logout_response = client.post("/auth/logout", json={"refresh_token": refresh_token})
     assert logout_response.status_code == 200
     assert logout_response.json() == {"loggedOut": True}
-    refresh_response = client.post("/auth/refresh", json={"refresh_token": refresh_token})
+    refresh_response = client.post(
+        "/auth/refresh", json={"refresh_token": refresh_token}
+    )
     assert refresh_response.status_code == 401
 
 
@@ -168,7 +170,10 @@ def test_sync_persists_location_and_sos_events(client):
         ],
     )
     assert response.status_code == 200
-    assert [item["status"] for item in response.json()["results"]] == ["accepted", "accepted"]
+    assert [item["status"] for item in response.json()["results"]] == [
+        "accepted",
+        "accepted",
+    ]
     safety_response = client.get("/patients/maya-demo/safety", headers=headers)
     assert safety_response.status_code == 200
     safety = safety_response.json()
@@ -205,19 +210,40 @@ def test_sync_rejects_stale_location_as_conflict(client):
 
 
 def test_phase7_report_alert_and_location_routes_are_protected(client):
-    login = client.post("/auth/login", json={"email": "anita@neurox.demo", "password": "NeuroXDemo!2026"})
+    login = client.post(
+        "/auth/login",
+        json={"email": "anita@neurox.demo", "password": "NeuroXDemo!2026"},
+    )
     headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
-    assert client.get("/patients/maya-demo/reports/activity", headers=headers).status_code == 200
+    assert (
+        client.get("/patients/maya-demo/reports/activity", headers=headers).status_code
+        == 200
+    )
     assert client.get("/patients/maya-demo/alerts", headers=headers).status_code == 200
-    assert client.get("/patients/maya-demo/location-updates", headers=headers).status_code == 200
+    assert (
+        client.get("/patients/maya-demo/location-updates", headers=headers).status_code
+        == 200
+    )
 
-    patient_login = client.post("/auth/login", json={"email": "maya@neurox.demo", "password": "NeuroXDemo!2026"})
-    patient_headers = {"Authorization": f"Bearer {patient_login.json()['access_token']}"}
-    assert client.get("/patients/maya-demo/reports/activity", headers=patient_headers).status_code == 200
+    patient_login = client.post(
+        "/auth/login", json={"email": "maya@neurox.demo", "password": "NeuroXDemo!2026"}
+    )
+    patient_headers = {
+        "Authorization": f"Bearer {patient_login.json()['access_token']}"
+    }
+    assert (
+        client.get(
+            "/patients/maya-demo/reports/activity", headers=patient_headers
+        ).status_code
+        == 200
+    )
 
 
 def test_caregiver_profile_update_route(client):
-    login = client.post("/auth/login", json={"email": "anita@neurox.demo", "password": "NeuroXDemo!2026"})
+    login = client.post(
+        "/auth/login",
+        json={"email": "anita@neurox.demo", "password": "NeuroXDemo!2026"},
+    )
     headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
     response = client.put("/auth/me", headers=headers, json={"name": "Anita Devi"})
     assert response.status_code == 200
@@ -225,12 +251,20 @@ def test_caregiver_profile_update_route(client):
 
 
 def test_emergency_contact_create_update_and_deactivate(client):
-    login = client.post("/auth/login", json={"email": "anita@neurox.demo", "password": "NeuroXDemo!2026"})
+    login = client.post(
+        "/auth/login",
+        json={"email": "anita@neurox.demo", "password": "NeuroXDemo!2026"},
+    )
     headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
     created = client.post(
         "/patients/maya-demo/emergency-contacts",
         headers=headers,
-        json={"name": "Rita Devi", "phone": "+91 90000 00000", "relationship": "Neighbor", "priority": 3},
+        json={
+            "name": "Rita Devi",
+            "phone": "+91 90000 00000",
+            "relationship": "Neighbor",
+            "priority": 3,
+        },
     )
     assert created.status_code == 201
     contact_id = created.json()["id"]
@@ -251,13 +285,30 @@ def test_emergency_contact_create_update_and_deactivate(client):
 
 
 def test_caregiver_password_change_requires_current_password(client):
-    login = client.post("/auth/login", json={"email": "anita@neurox.demo", "password": "NeuroXDemo!2026"})
+    login = client.post(
+        "/auth/login",
+        json={"email": "anita@neurox.demo", "password": "NeuroXDemo!2026"},
+    )
     headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
-    invalid = client.put("/auth/me/password", headers=headers, json={"current_password": "wrong-pass", "new_password": "NewNeuroX!2026"})
+    invalid = client.put(
+        "/auth/me/password",
+        headers=headers,
+        json={"current_password": "wrong-pass", "new_password": "NewNeuroX!2026"},
+    )
     assert invalid.status_code == 400
-    changed = client.put("/auth/me/password", headers=headers, json={"current_password": "NeuroXDemo!2026", "new_password": "NewNeuroX!2026"})
+    changed = client.put(
+        "/auth/me/password",
+        headers=headers,
+        json={"current_password": "NeuroXDemo!2026", "new_password": "NewNeuroX!2026"},
+    )
     assert changed.status_code == 200
-    assert client.post("/auth/login", json={"email": "anita@neurox.demo", "password": "NewNeuroX!2026"}).status_code == 200
+    assert (
+        client.post(
+            "/auth/login",
+            json={"email": "anita@neurox.demo", "password": "NewNeuroX!2026"},
+        ).status_code
+        == 200
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -274,17 +325,26 @@ def test_language_config_is_public_and_returns_required_fields(client):
     assert isinstance(configs, list)
     assert len(configs) >= 2
 
-    required_fields = {"languageCode", "languageName", "speechSupported", "ttsSupported"}
+    required_fields = {
+        "languageCode",
+        "languageName",
+        "speechSupported",
+        "ttsSupported",
+    }
     for config in configs:
         missing = required_fields - set(config.keys())
-        assert not missing, f"Language config for {config.get('languageCode')} missing fields: {missing}"
+        assert not missing, (
+            f"Language config for {config.get('languageCode')} missing fields: {missing}"
+        )
 
     # Assamese must be present as the primary patient language for the demo.
     assamese = next((c for c in configs if c["languageCode"] == "as-IN"), None)
     assert assamese is not None, "Assamese (as-IN) language config is missing"
     assert assamese["speechSupported"] is True
     assert assamese["ttsSupported"] is False, "Assamese TTS is not yet available"
-    assert assamese["ttsFallbackNote"] is not None, "Assamese config must include a ttsFallbackNote"
+    assert assamese["ttsFallbackNote"] is not None, (
+        "Assamese config must include a ttsFallbackNote"
+    )
 
     # English must be present and fully supported.
     english = next((c for c in configs if c["languageCode"] == "en-IN"), None)
@@ -310,12 +370,27 @@ def _stranger_headers(client) -> dict:
 
 
 def test_unrelated_caregiver_cannot_read_activity_report(client):
-    assert client.get("/patients/maya-demo/reports/activity", headers=_stranger_headers(client)).status_code == 403
+    assert (
+        client.get(
+            "/patients/maya-demo/reports/activity", headers=_stranger_headers(client)
+        ).status_code
+        == 403
+    )
 
 
 def test_unrelated_caregiver_cannot_read_alerts(client):
-    assert client.get("/patients/maya-demo/alerts", headers=_stranger_headers(client)).status_code == 403
+    assert (
+        client.get(
+            "/patients/maya-demo/alerts", headers=_stranger_headers(client)
+        ).status_code
+        == 403
+    )
 
 
 def test_unrelated_caregiver_cannot_read_location_updates(client):
-    assert client.get("/patients/maya-demo/location-updates", headers=_stranger_headers(client)).status_code == 403
+    assert (
+        client.get(
+            "/patients/maya-demo/location-updates", headers=_stranger_headers(client)
+        ).status_code
+        == 403
+    )

@@ -3,7 +3,16 @@
 # ===================================
 from datetime import datetime, timezone
 from uuid import uuid4
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    event,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 
@@ -26,6 +35,15 @@ class User(Base):
     google_subject: Mapped[str | None] = mapped_column(
         String(255), unique=True, nullable=True
     )
+    email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    phone_number: Mapped[str | None] = mapped_column(
+        String(16), unique=True, nullable=True
+    )
+    phone_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    locked_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
@@ -45,6 +63,16 @@ class CaregiverPatientAssignment(Base):
     patient_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class CaregiverSettings(Base):
+    __tablename__ = "caregiver_settings"
+    caregiver_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    available: Mapped[bool] = mapped_column(Boolean, default=True)
+    notify_sos: Mapped[bool] = mapped_column(Boolean, default=True)
+    notify_safety_alerts: Mapped[bool] = mapped_column(Boolean, default=True)
+    notify_reminders: Mapped[bool] = mapped_column(Boolean, default=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
 # EmergencyContact model representing emergency contacts for patients
@@ -153,8 +181,33 @@ class RefreshSession(Base):
     __tablename__ = "refresh_sessions"
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    family_id: Mapped[str] = mapped_column(String(36), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    last_used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     revoked: Mapped[bool] = mapped_column(Boolean, default=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    revoke_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    device_name: Mapped[str] = mapped_column(String(80), default="Unknown client")
+
+
+class AccountToken(Base):
+    __tablename__ = "account_tokens"
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    purpose: Mapped[str] = mapped_column(String(32), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    consumed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
 # ActivitySession model representing activity sessions for patients
@@ -176,6 +229,11 @@ class ActivitySession(Base):
     completion_status: Mapped[str] = mapped_column(String(32), default="started")
     difficulty_level: Mapped[int] = mapped_column(Integer)
     offline_created: Mapped[bool] = mapped_column(Boolean, default=False)
+    content_version: Mapped[str] = mapped_column(String(32), default="legacy")
+    interruptions: Mapped[int] = mapped_column(Integer, default=0)
+    accessibility_mode: Mapped[str] = mapped_column(String(32), default="standard")
+    app_version: Mapped[str] = mapped_column(String(32), default="unknown")
+    model_version: Mapped[str] = mapped_column(String(32), default="adaptive-v1")
 
 
 # Reminder model representing reminders for patients
@@ -192,6 +250,10 @@ class Reminder(Base):
     repeat_rule: Mapped[str | None] = mapped_column(String(64), nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     completed: Mapped[bool] = mapped_column(Boolean, default=False)
+    status: Mapped[str] = mapped_column(String(24), default="upcoming")
+    snoozed_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    timezone_name: Mapped[str] = mapped_column(String(64), default="Asia/Kolkata")
 
 
 # SyncEvent model records client mutations so retries are idempotent.
@@ -230,6 +292,12 @@ class PrivacyRequest(Base):
     request_type: Mapped[str] = mapped_column(String(24))
     status: Mapped[str] = mapped_column(String(24), default="submitted")
     requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    reviewed_by: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class AuditEvent(Base):
@@ -245,3 +313,9 @@ class AuditEvent(Base):
     target_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+@event.listens_for(AuditEvent, "before_update")
+@event.listens_for(AuditEvent, "before_delete")
+def _audit_events_are_append_only(*_args) -> None:
+    raise ValueError("Audit events are append-only.")

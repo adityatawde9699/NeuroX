@@ -1,0 +1,17 @@
+groups:
+  - name: neurox-api
+    rules:
+      - alert: NeuroXApiUnavailable
+        expr: up{job="neurox-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: NeuroX API metrics endpoint is unavailable
+      - alert: NeuroXApiHighServerErrorRate
+        expr: sum(rate(neurox_http_requests_total{status=~"5.."}[5m])) / clamp_min(sum(rate(neurox_http_requests_total[5m])), 0.001) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: NeuroX API 5xx rate exceeds 5 percent

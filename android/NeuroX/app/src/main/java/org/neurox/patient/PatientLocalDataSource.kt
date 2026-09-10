@@ -17,13 +17,14 @@ class PatientLocalDataSource(val database: OfflineDatabase) {
             val cache = offlineDatabase.offlineCacheDao()
             cache.savePatient(CachedPatientEntity(patient.id, patient.name, patient.age, patient.preferredLanguage, fetchedAt))
             cache.clearActivities()
-            cache.saveActivities(activities.map { item -> CachedActivityEntity(item.id, item.title, item.description, item.difficulty, fetchedAt) })
+            cache.saveActivities(activities.map { item -> CachedActivityEntity(item.id, item.title, item.description, item.difficulty, item.contentVersion, fetchedAt) })
             cache.clearReminders()
-            cache.saveReminders(reminders.map { item -> CachedReminderEntity(item.id, item.title, item.scheduledTime, item.completed, item.description, fetchedAt) })
+            cache.saveReminders(reminders.map { item -> CachedReminderEntity(item.id, item.title, item.scheduledTime, item.completed, item.description, item.type, item.repeatRule, item.enabled, item.status, item.snoozedUntil, item.timezoneName, fetchedAt) })
             cache.saveSnapshot(CachedSnapshotEntity("activity-history", gson.toJson(history), fetchedAt))
             cache.saveSnapshot(CachedSnapshotEntity("emergency-contacts", gson.toJson(contacts), fetchedAt))
             cache.saveSnapshot(CachedSnapshotEntity("safety", gson.toJson(safety), fetchedAt))
         }
+        offlineDatabase.checkpointBackup()
     }
 
     suspend fun load(): RemoteData? = withContext(Dispatchers.IO) {
@@ -34,8 +35,8 @@ class PatientLocalDataSource(val database: OfflineDatabase) {
         val safety = cache.snapshot("safety")?.let { gson.fromJson(it.payloadJson, SafetyState::class.java) }
         RemoteData(
             Patient(patient.id, patient.name, patient.age, patient.preferredLanguage),
-            cache.activities().map { ActivityItem(it.id, it.title, it.description, it.difficulty) },
-            cache.reminders().map { ReminderItem(it.id, it.title, it.scheduledTime, it.completed, it.description) },
+            cache.activities().map { ActivityItem(it.id, it.title, it.description, it.difficulty, it.contentVersion) },
+            cache.reminders().map { ReminderItem(it.id, it.title, it.scheduledTime, it.completed, it.description, it.type, it.repeatRule, it.enabled, it.status, it.snoozedUntil, it.timezoneName) },
             history,
             contacts,
             safety

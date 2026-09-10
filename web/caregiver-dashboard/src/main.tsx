@@ -1,28 +1,32 @@
 import { FormEvent, ReactNode, useEffect, useState } from 'react'
-import { Activity, AlertTriangle, Bell, ChevronRight, Clock, HeartPulse, Home, LifeBuoy, LocateFixed, MapPin, Menu, MoreHorizontal, Phone, Radar, Settings, ShieldCheck, Siren, Users, Wifi, WifiOff } from 'lucide-react'
+import { Activity, AlertTriangle, Bell, CalendarClock, ChevronRight, Clock, HeartPulse, Home, LifeBuoy, LocateFixed, MapPin, Menu, MoreHorizontal, Phone, Radar, Settings, ShieldCheck, Siren, Users, Wifi, WifiOff } from 'lucide-react'
 import { Area, AreaChart, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { createRoot } from 'react-dom/client'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, useLocation, useNavigate } from 'react-router-dom'
 import { dashboardApi } from './api/dashboardApi'
 import { authApi } from './api/dashboardApi'
 import { SettingsPage } from './pages/SettingsPage'
+import { ResetPassword, VerifyEmail } from './pages/AccountRecoveryPages'
 import { storeSession } from './auth/authStorage'
 import { useAuth } from './auth/useAuth'
 import { api } from './api/client'
 import { useDashboardBootstrap } from './hooks/useDashboardBootstrap'
 import { AppSidebar } from './layout/AppSidebar'
+import { AppErrorBoundary } from './components/AppErrorBoundary'
 import { PatientsPage } from './pages/PatientsPage'
 import { ReportsPage } from './pages/ReportsPage'
 import { ActivitiesPage } from './pages/ActivitiesPage'
 import { AlertsPage } from './pages/AlertsPage'
 import { LocationPage } from './pages/LocationPage'
 import { PatientProfilePage } from './pages/PatientProfilePage'
+import { RemindersPage } from './pages/RemindersPage'
 import type { AuthUser, Contact, LanguageConfig, Patient, PerformanceData, SafetyAlert, SafetyLocation, SafetySettings, SafetyState, SosEvent, TrendPoint } from './types/dashboard'
 import './styles.css'
 
 declare global { interface Window { google?: { accounts: { id: { initialize: (config: unknown) => void; renderButton: (element: HTMLElement, config: unknown) => void } } } } }
 
-const nav = [{label:'Overview', path:'/overview', icon:Home},{label:'Patients', path:'/patients', icon:Users},{label:'Activities', path:'/activities', icon:Activity},{label:'Alerts', path:'/alerts', icon:Bell},{label:'Location', path:'/location', icon:MapPin},{label:'Reports', path:'/reports', icon:HeartPulse},{label:'Settings', path:'/settings', icon:Settings}]
+const nav = [{label:'Overview', path:'/overview', icon:Home},{label:'Patients', path:'/patients', icon:Users},{label:'Activities', path:'/activities', icon:Activity},{label:'Reminders', path:'/reminders', icon:CalendarClock},{label:'Alerts', path:'/alerts', icon:Bell},{label:'Location', path:'/location', icon:MapPin},{label:'Reports', path:'/reports', icon:HeartPulse},{label:'Settings', path:'/settings', icon:Settings}]
 
 type AuthResponse = { access_token: string; user: AuthUser }
 
@@ -45,8 +49,11 @@ function App() {
   const { user, setUser, checking, error: sessionError, signOut } = useAuth()
   const {patient, safety, trend, performanceLoaded, activityCount, patientLang, loading, error, loadSafety} = useDashboardBootstrap(user, selectedPatientId)
 
+  if (location.pathname === '/reset-password') return <ResetPassword token={new URLSearchParams(location.search).get('token') ?? ''}/>
+  if (location.pathname === '/verify-email') return <VerifyEmail token={new URLSearchParams(location.search).get('token') ?? ''}/>
+
   const navigateToSection = (path: string) => {
-    const patientScoped = ['/activities', '/alerts', '/location', '/reports'].includes(path)
+    const patientScoped = ['/activities', '/reminders', '/alerts', '/location', '/reports'].includes(path)
     navigate(patientScoped && selectedPatientId ? `/patients/${selectedPatientId}${path}` : path)
   }
 
@@ -60,7 +67,7 @@ function App() {
     <main><header><div><p className="eyebrow">CAREGIVER PORTAL</p><h1>Good morning, {user.name.split(' ')[0]}</h1><p className="subtitle">Here is how your family members are doing today.</p></div><div className="header-actions"><button className="icon-button"><Bell size={21}/>{openCount>0&&<em/>}</button><button className="profile">{initials(user.name)}</button></div></header>
       <section className="stats"><Stat icon={<Users/>} label="Active patients" value={patient ? '1' : '0'} detail={patient ? `${patient.name} connected` : 'No assignment'} tone="blue"/><Stat icon={<Activity/>} label="Completed sessions" value={activityCount === null ? '-' : String(activityCount)} detail={performanceLoaded ? 'From synced activity data' : 'Waiting for activity data'} tone="green"/><Stat icon={<Bell/>} label="Pending alerts" value={String(openCount)} detail={openCount ? 'Needs acknowledgement' : 'All clear'} tone="amber"/><Stat icon={<ShieldCheck/>} label="Safety status" value={openCount ? 'Review' : 'Safe'} detail={safety?.location?.label ?? 'No location yet'} tone="mint"/></section>
       {sessionError && <p className="auth-error" role="alert">{sessionError}</p>}
-      {loading ? <p className="empty" role="status">Loading caregiver data…</p> : error ? <p className="auth-error" role="alert">{error} <button className="quiet" onClick={() => window.location.reload()}>Retry</button></p> : active === 'Patients' ? <PatientsPage/> : active === 'Activities' ? <ActivitiesPage patientId={patient?.id}/> : active === 'Alerts' ? <AlertsPage patientId={patient?.id}/> : active === 'Reports' ? <ReportsPage patientId={patient?.id}/> : active === 'Settings' ? <SettingsPage user={user} onUpdated={setUser}/> : active === 'Location' ? <LocationPage patient={patient} safety={safety} reload={() => patient && loadSafety(patient.id)}/> : selectedPatientId && !nestedSection ? <PatientProfilePage patient={patient} safety={safety}/> : <DashboardOverview patient={patient} safety={safety} trend={trend} performanceLoaded={performanceLoaded} patientLang={patientLang} reload={() => patient && loadSafety(patient.id)} onViewProfile={() => patient && navigate(`/patients/${patient.id}`)}/>}
+      {loading ? <p className="empty" role="status">Loading caregiver data…</p> : error ? <p className="auth-error" role="alert">{error} <button className="quiet" onClick={() => window.location.reload()}>Retry</button></p> : active === 'Patients' ? <PatientsPage/> : active === 'Activities' ? <ActivitiesPage patientId={patient?.id}/> : active === 'Reminders' ? <RemindersPage patientId={patient?.id}/> : active === 'Alerts' ? <AlertsPage patientId={patient?.id}/> : active === 'Reports' ? <ReportsPage patientId={patient?.id}/> : active === 'Settings' ? <SettingsPage user={user} onUpdated={setUser}/> : active === 'Location' ? <LocationPage patient={patient} safety={safety} reload={() => patient && loadSafety(patient.id)}/> : selectedPatientId && !nestedSection ? <PatientProfilePage patient={patient} safety={safety}/> : <DashboardOverview patient={patient} safety={safety} trend={trend} performanceLoaded={performanceLoaded} patientLang={patientLang} reload={() => patient && loadSafety(patient.id)} onViewProfile={() => patient && navigate(`/patients/${patient.id}`)}/>}
       <p className="disclaimer">NeuroX provides caregiver coordination and supportive insights. SOS workflows notify configured caregivers and do not contact government or emergency services directly.</p>
     </main><button className="mobile-menu"><Menu/></button></div>
 }
@@ -138,12 +145,12 @@ function PatientSafetyScreen({user, patient, safety, reload, signOut}:{user:Auth
   const sendHelp = async () => {
     if (!patient) return
     setBusy(true)
-    try { let location = null; try { location = await browserLocation() } catch { setError('Location was unavailable; sending the caregiver alert without a new location.') } if (location) { await api.post(`/patients/${patient.id}/location-updates`, {latitude:location.latitude, longitude:location.longitude, accuracy_m:location.accuracy, connection_state:'online', captured_at:new Date().toISOString()}) } await api.post(`/patients/${patient.id}/sos-events`, {message:'I need help. Please check on me when you can.'}); await reload() } catch (err) { setError(err instanceof Error ? err.message : 'Unable to send the caregiver alert.') } finally { setBusy(false) }
+    try { let location = null; try { location = await browserLocation() } catch { setError('Location was unavailable; sending the caregiver alert without a new location.') } if (location) { await api.post(`/api/v1/patients/${patient.id}/location-updates`, {latitude:location.latitude, longitude:location.longitude, accuracy_m:location.accuracy, connection_state:'online', captured_at:new Date().toISOString()}) } await api.post(`/api/v1/patients/${patient.id}/sos-events`, {message:'I need help. Please check on me when you can.'}); await reload() } catch (err) { setError(err instanceof Error ? err.message : 'Unable to send the caregiver alert.') } finally { setBusy(false) }
   }
   const sendSos = async () => {
     if (!patient) return
     setBusy(true)
-    try { await api.post(`/patients/${patient.id}/sos-events`, {message:'I need help. Please check on me.'}); await reload() } catch (err) { setError(err instanceof Error ? err.message : 'Unable to send the SOS caregiver workflow.') } finally { setBusy(false) }
+    try { await api.post(`/api/v1/patients/${patient.id}/sos-events`, {message:'I need help. Please check on me.'}); await reload() } catch (err) { setError(err instanceof Error ? err.message : 'Unable to send the SOS caregiver workflow.') } finally { setBusy(false) }
   }
   const location = safety?.location
   return <main className="patient-safety"><section className="patient-card"><div className="patient-top"><div className="brand"><span className="logo">N</span><span>neuro<span>X</span></span></div><button className="quiet" onClick={signOut}>Sign out</button></div><p className="eyebrow">PATIENT SAFETY</p><h1>Hello, {user.name.split(' ')[0]}</h1><p className="subtitle">Your safety screen shares updates with your configured caregivers only.</p>{error && <p className="auth-error">{error}</p>}<div className="safety-status"><ShieldCheck size={25}/><div><b>{safety?.status ?? 'Loading safety status'}</b><p>{location ? `${location.label} - ${location.freshness} - accuracy +/- ${Math.round(location.accuracyM)} m - ${location.connectionState}` : 'No location has been shared yet.'}</p></div></div><div className="return-row"><Clock size={20}/><div><b>Expected return</b><p>{formatReturn(safety?.settings.expectedReturnAt)}</p></div></div><div className="patient-actions"><button className="help-button" disabled={busy} onClick={sendHelp}><LifeBuoy size={24}/>I Need Help</button><button className="sos-button" disabled={busy} onClick={sendSos}><Siren size={25}/>SOS</button></div><p className="sos-note">SOS starts a NeuroX caregiver workflow. It does not directly call government or emergency services.</p><section className="contact-list">{safety?.contacts.map(contact=><div className="contact-row" key={contact.id}><Phone size={18}/><div><b>{contact.name}</b><p>{contact.relationship} - {contact.phone}</p></div></div>)}</section><PrivacyControls/></section></main>
@@ -170,15 +177,28 @@ function SignIn({onAuthenticated, notice}:{onAuthenticated:(user:AuthUser)=>void
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [recoveryMessage, setRecoveryMessage] = useState('')
   const finish = (data: AuthResponse) => { storeSession(data.access_token, data.user); onAuthenticated(data.user) }
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     setLoading(true)
     setError('')
     try {
-      finish(creatingAccount
+      const data = creatingAccount
         ? await authApi.register(name.trim(), email.trim(), password)
-        : await authApi.login(email.trim(), password))
+        : await authApi.login(email.trim(), password)
+      if (creatingAccount && data.user.emailVerified === false) {
+        setCreatingAccount(false)
+        setPassword('')
+        try {
+          const verification = await authApi.requestEmailVerification(data.access_token)
+          setRecoveryMessage(verification.message)
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Unable to send the verification email.')
+        }
+      } else {
+        finish(data)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : creatingAccount ? 'Unable to create your account.' : 'Unable to sign in.')
     } finally { setLoading(false) }
@@ -187,12 +207,20 @@ function SignIn({onAuthenticated, notice}:{onAuthenticated:(user:AuthUser)=>void
     setCreatingAccount(current => !current)
     setError('')
     setPassword('')
+    setRecoveryMessage('')
+  }
+  const requestReset = async () => {
+    setError(''); setRecoveryMessage('')
+    if (!email.trim()) { setError('Enter your email address first.'); return }
+    try { setRecoveryMessage((await authApi.requestPasswordReset(email.trim())).message) }
+    catch (err) { setError(err instanceof Error ? err.message : 'Unable to request a password reset.') }
   }
   useEffect(() => { const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID; if (!clientId) return; const script = document.createElement('script'); script.src='https://accounts.google.com/gsi/client'; script.async=true; script.onload=()=>{ window.google?.accounts.id.initialize({client_id:clientId, callback:async ({credential}:{credential:string})=>{ try { finish(await authApi.google(credential)) } catch(err) { setError(err instanceof Error ? err.message : 'Google sign-in failed.') } }}); const target=document.getElementById('google-button'); if(target) { target.textContent=''; window.google?.accounts.id.renderButton(target,{theme:'outline',size:'large',width:360,text:'continue_with'}) } }; document.head.appendChild(script); return ()=>script.remove() }, [])
-  return <main className="auth-page"><section className="auth-card"><div className="brand"><span className="logo">N</span><span>neuro<span>X</span></span></div><p className="eyebrow">CAREGIVER PORTAL</p><h1>{creatingAccount ? 'Create your account' : 'Welcome back'}</h1><p className="subtitle">{creatingAccount ? 'Create a caregiver account to coordinate supportive activity and safety information.' : 'Sign in to view supportive activity and safety information.'}</p><form onSubmit={submit}>{creatingAccount && <label>Full name<input value={name} onChange={event=>setName(event.target.value)} autoComplete="name" minLength={2} maxLength={80} required/></label>}<label>Email<input value={email} onChange={event=>setEmail(event.target.value)} autoComplete="email" type="email" required/></label><label>Password<input value={password} onChange={event=>setPassword(event.target.value)} autoComplete={creatingAccount ? 'new-password' : 'current-password'} type="password" minLength={8} required/></label>{(error || notice)&&<p className="auth-error" role="alert">{error || notice}</p>}<button className="auth-submit" disabled={loading}>{loading ? (creatingAccount ? 'Creating account...' : 'Signing in...') : (creatingAccount ? 'Create caregiver account' : 'Sign in')}</button></form><button type="button" className="auth-toggle" onClick={changeMode}>{creatingAccount ? 'Already have an account? Sign in' : 'New to NeuroX? Create a caregiver account'}</button><div className="or"><span/>or continue with<span/></div><div id="google-button" className="google-placeholder">Google sign-in appears after you set VITE_GOOGLE_CLIENT_ID.</div></section></main>
+  return <main className="auth-page"><section className="auth-card"><div className="brand"><span className="logo">N</span><span>neuro<span>X</span></span></div><p className="eyebrow">CAREGIVER PORTAL</p><h1>{creatingAccount ? 'Create your account' : 'Welcome back'}</h1><p className="subtitle">{creatingAccount ? 'Create a caregiver account to coordinate supportive activity and safety information.' : 'Sign in to view supportive activity and safety information.'}</p><form onSubmit={submit}>{creatingAccount && <label>Full name<input value={name} onChange={event=>setName(event.target.value)} autoComplete="name" minLength={2} maxLength={80} required/></label>}<label>Email<input value={email} onChange={event=>setEmail(event.target.value)} autoComplete="email" type="email" required/></label><label>Password<input value={password} onChange={event=>setPassword(event.target.value)} autoComplete={creatingAccount ? 'new-password' : 'current-password'} type="password" minLength={8} required/></label>{(error || notice)&&<p className="auth-error" role="alert">{error || notice}</p>}{recoveryMessage&&<p className="success" role="status">{recoveryMessage}</p>}<button className="auth-submit" disabled={loading}>{loading ? (creatingAccount ? 'Creating account...' : 'Signing in...') : (creatingAccount ? 'Create caregiver account' : 'Sign in')}</button></form>{!creatingAccount&&<button type="button" className="auth-toggle" onClick={()=>void requestReset()}>Forgot password?</button>}<button type="button" className="auth-toggle" onClick={changeMode}>{creatingAccount ? 'Already have an account? Sign in' : 'New to NeuroX? Create a caregiver account'}</button><div className="or"><span/>or continue with<span/></div><div id="google-button" className="google-placeholder">Google sign-in appears after you set VITE_GOOGLE_CLIENT_ID.</div></section></main>
 }
 
 function Stat({icon,label,value,detail,tone}:{icon:ReactNode,label:string,value:string,detail:string,tone:string}) {return <article className="stat"><div className={`stat-icon ${tone}`}>{icon}</div><p>{label}</p><h2>{value}</h2><small>{detail}</small></article>}
 
 export default App
-createRoot(document.getElementById('root')!).render(<BrowserRouter><App /></BrowserRouter>)
+const queryClient = new QueryClient({defaultOptions: {queries: {staleTime: 30_000, retry: 1, refetchOnWindowFocus: false}}})
+createRoot(document.getElementById('root')!).render(<AppErrorBoundary><QueryClientProvider client={queryClient}><BrowserRouter><App /></BrowserRouter></QueryClientProvider></AppErrorBoundary>)

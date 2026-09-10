@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from fastapi import Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
+from app.audit import record
 from app.models import (
     LocationUpdate,
     SafetyAlert,
@@ -33,6 +34,7 @@ from app.services.safety_state import (
 def location_history(
     patient_id: str,
     limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     user: User = Depends(patient_access),
     db: Session = Depends(get_db),
 ):
@@ -45,6 +47,7 @@ def location_history(
         db.query(LocationUpdate)
         .filter_by(patient_id=patient_id)
         .order_by(LocationUpdate.captured_at.desc())
+        .offset(offset)
         .limit(limit)
         .all()
     )
@@ -110,6 +113,14 @@ def update_safety_settings(
     for field, value in request.model_dump(exclude_unset=True).items():
         setattr(settings, field, value)
     settings.updated_at = datetime.now(timezone.utc)
+    record(
+        db,
+        actor_id=user.id,
+        patient_id=patient_id,
+        action="safety.settings_updated",
+        target_id=patient_id,
+        metadata={"fields": sorted(request.model_dump(exclude_unset=True))},
+    )
     db.commit()
     evaluate_safety(patient_id, db)
     db.refresh(settings)
@@ -182,6 +193,13 @@ def acknowledge_sos_event(
     event.status = "acknowledged"
     event.acknowledged_at = datetime.now(timezone.utc)
     event.acknowledged_by = user.id
+    record(
+        db,
+        actor_id=user.id,
+        patient_id=patient_id,
+        action="safety.sos_acknowledged",
+        target_id=event.id,
+    )
     db.commit()
     db.refresh(event)
     return public_sos(event, db)
@@ -205,6 +223,13 @@ def acknowledge_safety_alert(
     alert.status = "acknowledged"
     alert.acknowledged_at = datetime.now(timezone.utc)
     alert.acknowledged_by = user.id
+    record(
+        db,
+        actor_id=user.id,
+        patient_id=patient_id,
+        action="safety.alert_acknowledged",
+        target_id=alert.id,
+    )
     db.commit()
     db.refresh(alert)
     return public_alert(alert, db)
