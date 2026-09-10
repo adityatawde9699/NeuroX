@@ -29,6 +29,7 @@ def public_patient(patient: Patient, user: User) -> dict:
         "age": patient.age,
         "preferredLanguage": patient.preferred_language,
         "nextDifficulty": patient.next_difficulty,
+        "personalizationOverride": patient.personalization_override,
     }
 
 

@@ -113,6 +113,11 @@ class ActivityStart(BaseModel):
     model_version: str = Field(default="adaptive-v1", min_length=1, max_length=32)
 
 
+class PersonalizationOverride(BaseModel):
+    """A transparent human override; null returns control to the rule engine."""
+    difficulty_level: int | None = Field(default=None, ge=1, le=5)
+
+
 # Create Reminder
 class ReminderCreate(BaseModel):
     patient_id: str
@@ -280,3 +285,9 @@ class SyncEventRequest(BaseModel):
     event_type: str = Field(min_length=3, max_length=48)
     patient_id: str = Field(min_length=1, max_length=36)
     payload: dict
+    # Envelope metadata makes an offline mutation diagnosable without relying
+    # on the device clock as the authoritative server timestamp.
+    schema_version: int = Field(default=1, ge=1, le=10)
+    device_time: datetime | None = None
+    attempt_count: int = Field(default=0, ge=0, le=1000)
+    origin: str = Field(default="android", min_length=2, max_length=32)

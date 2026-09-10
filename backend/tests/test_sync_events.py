@@ -133,6 +133,20 @@ def test_sync_duplicate_event_is_idempotent(client, patient_headers):
     assert second.json()["results"][0]["status"] == "duplicate"
 
 
+def test_sync_envelope_accepts_offline_metadata(client, patient_headers):
+    event_id = f"meta-{uuid4().hex}"
+    event = _activity_event(event_id)
+    event.update({
+        "schema_version": 1,
+        "device_time": datetime.now(timezone.utc).isoformat(),
+        "attempt_count": 3,
+        "origin": "android",
+    })
+    response = client.post("/sync/events", json=[event], headers=patient_headers)
+    assert response.status_code == 200, response.text
+    assert response.json()["results"][0]["status"] == "accepted"
+
+
 def test_sync_sos_event_appears_in_safety(client, patient_headers, caregiver_headers):
     event_id = f"sos-{uuid4().hex}"
     resp = client.post(

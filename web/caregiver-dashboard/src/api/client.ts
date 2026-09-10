@@ -12,10 +12,25 @@ export class ApiError extends Error {
 
 const parseResponse = async <T>(response: Response): Promise<T> => {
   if (response.status === 204) return undefined as T
-  const body = await response.json().catch(() => null) as { detail?: string } | T | null
+  const body = await response.json().catch(() => null) as {
+    detail?: unknown
+    error?: { message?: string }
+  } | T | null
   if (!response.ok) {
-    const message = body && typeof body === 'object' && 'detail' in body ? body.detail : 'The request could not be completed.'
-    throw new ApiError(response.status, typeof message === 'string' ? message : 'The request could not be completed.')
+    const detail = body && typeof body === 'object' && 'detail' in body ? body.detail : null
+    const message = typeof detail === 'string'
+      ? detail
+      : Array.isArray(detail)
+        ? detail.map(item => {
+          if (!item || typeof item !== 'object') return 'Invalid value'
+          const field = 'loc' in item && Array.isArray(item.loc) ? item.loc.slice(-1)[0] : 'field'
+          const reason = 'msg' in item && typeof item.msg === 'string' ? item.msg : 'is invalid'
+          return `${String(field)}: ${reason}`
+        }).join('; ')
+        : body && typeof body === 'object' && 'error' in body && body.error?.message
+          ? body.error.message
+          : 'The request could not be completed.'
+    throw new ApiError(response.status, message || 'The request could not be completed.')
   }
   return body as T
 }

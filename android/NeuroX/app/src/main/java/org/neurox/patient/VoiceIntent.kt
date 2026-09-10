@@ -54,10 +54,10 @@ object IntentParser {
         "memory", "match", "matching", "pictures", "cards"
     )
     private val objectRecallKeywords = listOf(
-        "object", "objects", "recall", "remember objects", "remember the objects"
+        "object", "objects", "remember objects", "remember the objects"
     )
     private val patternKeywords = listOf(
-        "pattern", "sequence", "completion", "next"
+        "pattern"
     )
     private val reminderKeywords = listOf(
         "reminder", "reminders", "remind", "schedule", "what do i have", "what's next",
@@ -65,8 +65,11 @@ object IntentParser {
     )
     private val helpKeywords = listOf(
         "help", "sos", "emergency", "i need help", "assistance", "unsafe", "danger",
-        "contact caregiver", "contact anita"
+        "contact caregiver", "contact anita",
+        // Assamese and Hindi safety phrases. Help always wins over every other command.
+        "সহায়", "সাহায্য", "জৰুৰী", "বিপদ", "মদদ", "मदद", "सहायता", "आपातकाल"
     )
+    private val regionalReminderKeywords = listOf("অনুস্মাৰক", "মনত পেলাওক", "रिमाइंडर", "याद दिलाओ")
 
     /**
      * Parse [transcript] into a [VoiceIntent].
@@ -83,25 +86,33 @@ object IntentParser {
             return VoiceIntent.RequestHelp
         }
 
-        val hasStartVerb = startActivityKeywords.any { text.contains(it) }
+        if ((reminderKeywords + regionalReminderKeywords).any { text.contains(it) }) {
+            return VoiceIntent.ListReminders
+        }
+        val hasStartVerb = startActivityKeywords.any { word ->
+            Regex("\\b${Regex.escape(word)}\\b").containsMatchIn(text)
+        }
         val activityMention = when {
+            text.contains("story") -> "story-recall"
+            text.contains("sequence") -> "sequence-recall"
+            text.contains("routine") -> "daily-routine"
             memoryMatchKeywords.any { text.contains(it) }  -> "memory-match"
             objectRecallKeywords.any { text.contains(it) } -> "object-recall"
             patternKeywords.any { text.contains(it) }      -> "pattern"
             else                                           -> null
         }
 
-        if (activityMention != null || (hasStartVerb && !text.contains("help"))) {
+        if (activityMention != null) {
             return VoiceIntent.StartActivity(activityId = activityMention)
         }
 
         // Reminder intent
-        if (reminderKeywords.any { text.contains(it) }) {
+        if ((reminderKeywords + regionalReminderKeywords).any { text.contains(it) }) {
             return VoiceIntent.ListReminders
         }
 
         // Generic start verb with no specific activity
-        if (hasStartVerb) {
+        if (hasStartVerb && (text.contains("activity") || text.contains("game"))) {
             return VoiceIntent.StartActivity(activityId = null)
         }
 

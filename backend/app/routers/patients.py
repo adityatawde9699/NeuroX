@@ -5,6 +5,11 @@ router = APIRouter(tags=["patients"])
 router.add_api_route("/patients/me", service.my_patient, methods=["GET"])
 router.add_api_route("/patients/{patient_id}", service.patient, methods=["GET"])
 router.add_api_route(
+    "/patients/{patient_id}/personalization/override",
+    service.set_personalization_override,
+    methods=["PUT"],
+)
+router.add_api_route(
     "/caregivers/me/patients", service.assigned_patients, methods=["GET"]
 )
 router.add_api_route(

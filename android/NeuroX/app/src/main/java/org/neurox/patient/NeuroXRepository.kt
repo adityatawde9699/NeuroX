@@ -2,8 +2,10 @@ package org.neurox.patient
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import androidx.room.withTransaction
 import com.google.gson.reflect.TypeToken
 import java.util.UUID
+import java.time.Instant
 
 class NeuroXRepository internal constructor(
     private val sessions: SecureSessionStore,
@@ -40,7 +42,8 @@ class NeuroXRepository internal constructor(
 
     override suspend fun load(): RemoteData = withContext(Dispatchers.IO) {
         check(hasSession()) { "Please sign in first." }
-        syncPendingEvents()
+        val outcome = syncPendingEvents()
+        if (outcome is SyncOutcome.Retry) throw java.io.IOException(outcome.reason)
         val fresh = remote.load()
         local.save(fresh)
         // Screens always observe the same representation that is available offline.
@@ -60,20 +63,19 @@ class NeuroXRepository internal constructor(
         offlineDatabase.offlineCacheDao().updateReminderState(reminderId, status == "done", status, snoozedUntil)
         offlineDatabase.checkpointBackup()
     }
-    override suspend fun queueReminderState(reminderId: String, status: String, snoozedUntil: String?) = queue(
-        SyncEventRequest(UUID.randomUUID().toString(), "reminder_update", patientId(), mapOf("reminder_id" to reminderId, "changes" to mapOf("status" to status, "snoozed_until" to snoozedUntil)))
-    )
+    override suspend fun queueReminderState(reminderId: String, status: String, snoozedUntil: String?) =
+        queueReminderChange(reminderId, mapOf("status" to status, "snoozed_until" to snoozedUntil), status, snoozedUntil)
     override suspend fun startActivity(activity: ActivityItem, eventId: String, startedAt: String, offline: Boolean) = api.startActivity(activity.id, ActivityStartRequest(userId = patientId(), difficultyLevel = activity.difficulty, startedAt = startedAt, eventId = eventId, offlineCreated = offline, contentVersion = activity.contentVersion))
     override suspend fun completeActivity(activity: ActivityItem, request: ActivityCompletionRequest) = api.completeActivity(activity.id, request)
     override suspend fun queueActivityCompletion(request: ActivityCompletionRequest) = queue(
         SyncEventRequest(request.eventId, "activity_completion", patientId(), gson.fromJson(gson.toJson(request), object : TypeToken<Map<String, Any>>() {}.type))
     )
-    override suspend fun queueReminderUpdate(reminderId: String) = queue(
-        SyncEventRequest(UUID.randomUUID().toString(), "reminder_update", patientId(), mapOf("reminder_id" to reminderId, "changes" to mapOf("completed" to true)))
+    override suspend fun queueReminderUpdate(reminderId: String) =
+        queueReminderChange(reminderId, mapOf("completed" to true), "done", null)
+    override suspend fun queueLocation(request: LocationUpdateRequest) = queue(
+        SyncEventRequest(UUID.randomUUID().toString(), "location_update", patientId(), gson.fromJson(gson.toJson(request), object : TypeToken<Map<String, Any>>() {}.type))
     )
-    suspend fun queueLocation(request: LocationUpdateRequest, eventId: String = UUID.randomUUID().toString()) = queue(
-        SyncEventRequest(eventId, "location_update", patientId(), gson.fromJson(gson.toJson(request), object : TypeToken<Map<String, Any>>() {}.type))
-    )
+    override suspend fun publishLocation(request: LocationUpdateRequest) = api.location(patientId(), request)
     override suspend fun queueSos(request: SosRequest, eventId: String) = queue(
         SyncEventRequest(eventId, "sos_event", patientId(), gson.fromJson(gson.toJson(request), object : TypeToken<Map<String, Any>>() {}.type))
     )
@@ -85,6 +87,10 @@ class NeuroXRepository internal constructor(
     override suspend fun setConsent(purpose: String, granted: Boolean) = api.setConsent(ConsentUpdateRequest(purpose, granted))
     suspend fun loadSafety() = api.safety(patientId())
     override fun schedulePendingSync() = enqueueSync()
+    override suspend fun retryFailedSync() = withContext(Dispatchers.IO) {
+        offlineDatabase.pendingSyncDao().retryDeadLetters()
+        enqueueSync()
+    }
     private suspend fun queue(event: SyncEventRequest) = withContext(Dispatchers.IO) {
         offlineDatabase.pendingSyncDao().insert(
             PendingSyncEntity(
@@ -93,9 +99,41 @@ class NeuroXRepository internal constructor(
                 patientId = event.patientId,
                 payloadJson = gson.toJson(event.payload),
                 createdAt = System.currentTimeMillis(),
-                status = "pending"
+                status = "pending",
+                schemaVersion = event.schemaVersion,
+                deviceTime = event.deviceTime ?: Instant.now().toString(),
+                origin = event.origin,
             )
         )
+        offlineDatabase.checkpointBackup()
+        enqueueSync()
+    }
+
+    /** One Room transaction prevents a reminder's local state and outbox event diverging. */
+    private suspend fun queueReminderChange(
+        reminderId: String,
+        changes: Map<String, Any?>,
+        status: String,
+        snoozedUntil: String?,
+    ) = withContext(Dispatchers.IO) {
+        val event = SyncEventRequest(
+            UUID.randomUUID().toString(), "reminder_update", patientId(),
+            mapOf("reminder_id" to reminderId, "changes" to changes.filterValues { it != null }),
+            deviceTime = Instant.now().toString(),
+        )
+        offlineDatabase.withTransaction {
+            offlineDatabase.offlineCacheDao().updateReminderState(
+                reminderId, status == "done", status, snoozedUntil
+            )
+            offlineDatabase.pendingSyncDao().insert(
+                PendingSyncEntity(
+                    eventId = event.eventId, eventType = event.eventType,
+                    patientId = event.patientId, payloadJson = gson.toJson(event.payload),
+                    createdAt = System.currentTimeMillis(), schemaVersion = event.schemaVersion,
+                    deviceTime = checkNotNull(event.deviceTime), origin = event.origin,
+                )
+            )
+        }
         offlineDatabase.checkpointBackup()
         enqueueSync()
     }
@@ -107,30 +145,50 @@ class NeuroXRepository internal constructor(
                 eventId = entity.eventId,
                 eventType = entity.eventType,
                 patientId = entity.patientId,
-                payload = gson.fromJson(entity.payloadJson, object : TypeToken<Map<String, Any>>() {}.type)
+                payload = gson.fromJson(entity.payloadJson, object : TypeToken<Map<String, Any>>() {}.type),
+                schemaVersion = entity.schemaVersion,
+                deviceTime = entity.deviceTime.ifBlank { null },
+                attemptCount = entity.retryCount.coerceAtMost(1000),
+                origin = entity.origin,
             )
         }
         if (pending.isEmpty()) return SyncOutcome.Synced(0)
         val response = try {
             api.syncEvents(pending)
         } catch (error: java.io.IOException) {
+            offlineDatabase.pendingSyncDao().markRetry(entities.map { it.eventId }, error.message ?: "Network unavailable")
             return SyncOutcome.Retry(error.message ?: "Network unavailable")
         } catch (error: retrofit2.HttpException) {
-            return SyncOutcome.Retry(if (error.code() == 401) "Please sign in again." else "Server unavailable. Saved records will retry.")
+            val message = error.message()
+            return if (error.code() == 401 || error.code() == 408 || error.code() == 429 || error.code() >= 500) {
+                offlineDatabase.pendingSyncDao().markRetry(entities.map { it.eventId }, message)
+                SyncOutcome.Retry("Server unavailable. Saved records will retry.")
+            } else {
+                offlineDatabase.pendingSyncDao().markFailed(entities.map { it.eventId }, message)
+                SyncOutcome.Partial(0, entities.size)
+            }
         }
-        val completed = response.results.filter { it.status == "accepted" || it.status == "duplicate" }.map { it.eventId }.toSet()
+        val requestedIds = entities.map { it.eventId }.toSet()
+        val results = response.results.filter { it.eventId in requestedIds }
+        val completed = results.filter { it.status == "accepted" || it.status == "duplicate" }.map { it.eventId }.toSet()
         if (completed.isNotEmpty()) offlineDatabase.pendingSyncDao().delete(completed.toList())
-        val rejectedResults = response.results.filter { it.status == "rejected" || it.status == "conflict" }
+        val rejectedResults = results.filter { it.status == "rejected" || it.status == "conflict" }
         if (rejectedResults.isNotEmpty()) {
             val message = rejectedResults.joinToString("; ") { it.detail ?: "Event was rejected by the server." }
             offlineDatabase.pendingSyncDao().markFailed(rejectedResults.map { it.eventId }, message)
         }
         val rejected = rejectedResults.size
+        val unresolved = requestedIds - completed - rejectedResults.map { it.eventId }.toSet()
+        if (unresolved.isNotEmpty()) {
+            offlineDatabase.pendingSyncDao().markRetry(unresolved.toList(), "Incomplete server acknowledgement")
+            return SyncOutcome.Retry("Some records still need server acknowledgement.")
+        }
         return if (rejected > 0) SyncOutcome.Partial(completed.size, rejected) else SyncOutcome.Synced(completed.size)
     }
     /** Returns the number of events currently waiting in the offline queue. */
     override suspend fun pendingEventCount(): Int = withContext(Dispatchers.IO) {
         offlineDatabase.pendingSyncDao().getAll().size
     }
+    override suspend fun failedEventCount(): Int = offlineDatabase.pendingSyncDao().countFailed()
     override fun patientId(): String = sessions.read()?.patientId ?: error("Please sign in first.")
 }

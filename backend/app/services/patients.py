@@ -17,7 +17,9 @@ from app.services.authentication import current_user
 from app.schemas import (
     EmergencyContactCreate,
     EmergencyContactUpdate,
+    PersonalizationOverride,
 )
+from datetime import datetime, timezone
 
 
 def my_patient(user: User = Depends(current_user), db: Session = Depends(get_db)):
@@ -128,3 +130,31 @@ def update_emergency_contact(
     db.commit()
     db.refresh(contact)
     return public_contact(contact)
+
+
+def set_personalization_override(
+    patient_id: str,
+    request: PersonalizationOverride,
+    user: User = Depends(patient_access),
+    db: Session = Depends(get_db),
+):
+    patient_profile = db.get(Patient, patient_id)
+    if not patient_profile:
+        raise HTTPException(status_code=404, detail="Patient not found.")
+    patient_profile.personalization_override = request.difficulty_level
+    record(
+        db,
+        actor_id=user.id,
+        patient_id=patient_id,
+        action="personalization.override_updated",
+        target_id=patient_id,
+        metadata={"difficulty_level": request.difficulty_level},
+    )
+    db.commit()
+    return {
+        "difficultyLevel": patient_profile.personalization_override,
+        "updatedAt": datetime.now(timezone.utc),
+        "message": "A human-selected activity level is active."
+        if request.difficulty_level is not None
+        else "Automatic activity level adjustment is active.",
+    }

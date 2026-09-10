@@ -1,5 +1,5 @@
-from datetime import datetime
-from fastapi import Depends, Query
+from datetime import datetime, timezone
+from fastapi import Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import (
@@ -18,10 +18,11 @@ def performance(
             ActivitySession.user_id == patient_id,
             ActivitySession.completed_at.is_not(None),
         )
-        .order_by(ActivitySession.completed_at.asc())
+        .order_by(ActivitySession.completed_at.desc())
         .limit(30)
         .all()
     )
+    sessions.reverse()
     if not sessions:
         return {
             "patientId": patient_id,
@@ -67,6 +68,11 @@ def activity_report(
     _: User = Depends(patient_access),
     db: Session = Depends(get_db),
 ):
+    if from_date and to_date:
+        start = from_date.replace(tzinfo=timezone.utc) if from_date.tzinfo is None else from_date
+        end = to_date.replace(tzinfo=timezone.utc) if to_date.tzinfo is None else to_date
+        if start > end:
+            raise HTTPException(status_code=422, detail="Report start must precede end.")
     query = db.query(ActivitySession).filter(ActivitySession.user_id == patient_id)
     if from_date:
         query = query.filter(ActivitySession.started_at >= from_date)
@@ -77,9 +83,11 @@ def activity_report(
     sessions = (
         query.filter(ActivitySession.completed_at.is_not(None))
         .order_by(ActivitySession.started_at.asc())
-        .limit(limit)
+        .limit(limit + 1)
         .all()
     )
+    truncated = len(sessions) > limit
+    sessions = sessions[:limit]
     completion_rate = (
         sum(item.completion_status == "completed" for item in sessions) / len(sessions)
         if sessions
@@ -87,6 +95,8 @@ def activity_report(
     )
     return {
         "patientId": patient_id,
+        "truncated": truncated,
+        "generatedAt": datetime.now(timezone.utc),
         "summary": {
             "sessions": len(sessions),
             "completionRate": round(completion_rate, 2),
@@ -113,6 +123,8 @@ def activity_report(
                 "accuracy": item.accuracy or 0,
                 "responseTime": item.response_time or 0,
                 "difficulty": item.difficulty_level,
+                "offlineCreated": item.offline_created,
+                "modelVersion": item.model_version,
             }
             for item in sessions
         ],

@@ -27,6 +27,7 @@ from app.models import (
     SyncEvent,
     User,
 )
+from app.services.safety_state import evaluate_all_safety
 
 logger = logging.getLogger("neurox.worker")
 stopping = False
@@ -41,6 +42,7 @@ def run_maintenance() -> dict[str, int]:
         days=int(os.getenv("SESSION_RETENTION_DAYS", "30"))
     )
     with SessionLocal() as db:
+        safety_patients_checked = evaluate_all_safety(db)
         completed_deletions = _process_approved_deletions(db, now)
         tokens = db.execute(
             delete(AccountToken).where(
@@ -61,6 +63,7 @@ def run_maintenance() -> dict[str, int]:
         "privacy_deletions_completed": completed_deletions,
         "account_tokens_deleted": tokens,
         "refresh_sessions_deleted": sessions,
+        "safety_patients_checked": safety_patients_checked,
     }
 
 

@@ -51,6 +51,7 @@ describe('RemindersPage', () => {
     await waitFor(() => expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({
       patient_id:'patient-1', type:'medication', title:'Check care plan', repeat_rule:'daily',
     })))
+    expect(mockCreate.mock.calls[0][0]).toHaveProperty('timezone_name')
     expect(await screen.findByText(/schedule saved/)).toBeInTheDocument()
   })
 })

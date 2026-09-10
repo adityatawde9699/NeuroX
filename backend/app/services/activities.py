@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta, timezone
+
 from fastapi import Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.ai.personalization.adaptive_difficulty import (
@@ -7,6 +9,7 @@ from app.ai.personalization.adaptive_difficulty import (
 from app.database import get_db
 from app.models import (
     ActivitySession,
+    ConsentRecord,
     Patient,
     User,
 )
@@ -144,6 +147,10 @@ def complete_activity(
             ActivitySession.activity_id == activity_id,
             ActivitySession.completed_at.is_not(None),
             ActivitySession.event_id != session.event_id,
+            ActivitySession.interruptions == 0,
+            ActivitySession.offline_created.is_(False),
+            ActivitySession.accessibility_mode == session.accessibility_mode,
+            ActivitySession.content_version == session.content_version,
         )
         .order_by(ActivitySession.completed_at.desc())
         .limit(4)
@@ -168,7 +175,29 @@ def complete_activity(
     # Persist the recommended next difficulty so the Android app can hydrate it
     # from the patient profile without re-computing on every launch.
     patient_row = db.get(Patient, user.id)
+    explanation = "Kept the same level while learning your comfortable pace."
+    consent = (
+        db.query(ConsentRecord)
+        .filter_by(patient_id=user.id, purpose="personalization")
+        .order_by(ConsentRecord.recorded_at.desc())
+        .first()
+    )
     if patient_row:
+        if patient_row.personalization_override is not None:
+            next_level = patient_row.personalization_override
+            explanation = "Using the level selected by you or your caregiver."
+        elif not consent or not consent.granted:
+            next_level = session.difficulty_level
+            explanation = "Automatic personalization is off. Your level is unchanged."
+        elif session.interruptions > 0 or session.offline_created:
+            next_level = session.difficulty_level
+            explanation = "Kept the same level because timing may be affected by interruptions or offline use."
+        elif _within_difficulty_cooldown(patient_row.last_difficulty_change_at):
+            next_level = session.difficulty_level
+            explanation = "Kept the same level to avoid changing too quickly."
+        elif next_level != session.difficulty_level:
+            patient_row.last_difficulty_change_at = datetime.now(timezone.utc)
+            explanation = "Adjusted by one level after consistent activity results."
         patient_row.next_difficulty = next_level
         db.commit()
     return {
@@ -176,8 +205,16 @@ def complete_activity(
         "event_id": session.event_id,
         "next_difficulty": next_level,
         "performance_score": score,
-        "message": "Your next activity is adjusted to your performance.",
+        "message": explanation,
     }
+
+
+def _within_difficulty_cooldown(changed_at: datetime | None) -> bool:
+    if changed_at is None:
+        return False
+    if changed_at.tzinfo is None:
+        changed_at = changed_at.replace(tzinfo=timezone.utc)
+    return changed_at > datetime.now(timezone.utc) - timedelta(hours=24)
 
 
 # Get a patient's activity history

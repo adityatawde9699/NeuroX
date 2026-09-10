@@ -141,6 +141,10 @@ def sync(
                 patient_id=event.patient_id,
                 event_type=event.event_type,
                 payload=event.payload,
+                schema_version=event.schema_version,
+                device_time=event.device_time,
+                attempt_count=event.attempt_count,
+                origin=event.origin,
                 status="accepted",
                 result=jsonable_encoder(processed["result"]),
             )
@@ -165,6 +169,10 @@ def sync(
                 patient_id=event.patient_id,
                 event_type=event.event_type,
                 payload=event.payload,
+                schema_version=event.schema_version,
+                device_time=event.device_time,
+                attempt_count=event.attempt_count,
+                origin=event.origin,
                 status=status_text,
                 result={"detail": detail},
             )

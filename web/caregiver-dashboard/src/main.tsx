@@ -47,6 +47,7 @@ function App() {
     : location.pathname
   const active = nav.find(item => item.path === activePath)?.label ?? 'Overview'
   const { user, setUser, checking, error: sessionError, signOut } = useAuth()
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const {patient, safety, trend, performanceLoaded, activityCount, patientLang, loading, error, loadSafety} = useDashboardBootstrap(user, selectedPatientId)
 
   if (location.pathname === '/reset-password') return <ResetPassword token={new URLSearchParams(location.search).get('token') ?? ''}/>
@@ -63,13 +64,13 @@ function App() {
 
   const openCount = (safety?.alerts.length ?? 0) + (safety?.sosEvents.length ?? 0)
   return <div className="app-shell">
-    <AppSidebar items={nav} activePath={activePath} openAlerts={openCount} userName={user.name} onNavigate={navigateToSection} onSignOut={() => void signOut()}/>
-    <main><header><div><p className="eyebrow">CAREGIVER PORTAL</p><h1>Good morning, {user.name.split(' ')[0]}</h1><p className="subtitle">Here is how your family members are doing today.</p></div><div className="header-actions"><button className="icon-button"><Bell size={21}/>{openCount>0&&<em/>}</button><button className="profile">{initials(user.name)}</button></div></header>
+    <AppSidebar items={nav} activePath={activePath} openAlerts={openCount} userName={user.name} onNavigate={navigateToSection} onSignOut={() => void signOut()} mobileOpen={sidebarOpen} onClose={() => setSidebarOpen(false)}/>
+    {sidebarOpen && <button className="sidebar-backdrop" aria-label="Close navigation" onClick={() => setSidebarOpen(false)}/>}<main><header><div><p className="eyebrow">CAREGIVER PORTAL <span className="live-dot"/> LIVE</p><h1>Good morning, {user.name.split(' ')[0]}</h1><p className="subtitle">Here is how your family members are doing today. <span className="today">{new Intl.DateTimeFormat([], {weekday:'long', month:'short', day:'numeric'}).format(new Date())}</span></p></div><div className="header-actions"><button className="icon-button" aria-label={`${openCount} open alerts`} onClick={() => navigateToSection('/alerts')}><Bell size={21}/>{openCount>0&&<em/>}</button><button className="profile" aria-label="Open profile settings" onClick={() => navigateToSection('/settings')}>{initials(user.name)}</button></div></header>
       <section className="stats"><Stat icon={<Users/>} label="Active patients" value={patient ? '1' : '0'} detail={patient ? `${patient.name} connected` : 'No assignment'} tone="blue"/><Stat icon={<Activity/>} label="Completed sessions" value={activityCount === null ? '-' : String(activityCount)} detail={performanceLoaded ? 'From synced activity data' : 'Waiting for activity data'} tone="green"/><Stat icon={<Bell/>} label="Pending alerts" value={String(openCount)} detail={openCount ? 'Needs acknowledgement' : 'All clear'} tone="amber"/><Stat icon={<ShieldCheck/>} label="Safety status" value={openCount ? 'Review' : 'Safe'} detail={safety?.location?.label ?? 'No location yet'} tone="mint"/></section>
       {sessionError && <p className="auth-error" role="alert">{sessionError}</p>}
       {loading ? <p className="empty" role="status">Loading caregiver data…</p> : error ? <p className="auth-error" role="alert">{error} <button className="quiet" onClick={() => window.location.reload()}>Retry</button></p> : active === 'Patients' ? <PatientsPage/> : active === 'Activities' ? <ActivitiesPage patientId={patient?.id}/> : active === 'Reminders' ? <RemindersPage patientId={patient?.id}/> : active === 'Alerts' ? <AlertsPage patientId={patient?.id}/> : active === 'Reports' ? <ReportsPage patientId={patient?.id}/> : active === 'Settings' ? <SettingsPage user={user} onUpdated={setUser}/> : active === 'Location' ? <LocationPage patient={patient} safety={safety} reload={() => patient && loadSafety(patient.id)}/> : selectedPatientId && !nestedSection ? <PatientProfilePage patient={patient} safety={safety}/> : <DashboardOverview patient={patient} safety={safety} trend={trend} performanceLoaded={performanceLoaded} patientLang={patientLang} reload={() => patient && loadSafety(patient.id)} onViewProfile={() => patient && navigate(`/patients/${patient.id}`)}/>}
       <p className="disclaimer">NeuroX provides caregiver coordination and supportive insights. SOS workflows notify configured caregivers and do not contact government or emergency services directly.</p>
-    </main><button className="mobile-menu"><Menu/></button></div>
+    </main><button className="mobile-menu" aria-label="Open navigation" onClick={() => setSidebarOpen(true)}><Menu/></button></div>
 }
 
 function DashboardOverview({patient, safety, trend, performanceLoaded, patientLang, reload, onViewProfile}:{patient:Patient|null;safety:SafetyState|null;trend:TrendPoint[];performanceLoaded:boolean;patientLang:LanguageConfig|null;reload:()=>void;onViewProfile:()=>void}) {

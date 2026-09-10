@@ -91,7 +91,10 @@ def public_location(location: LocationUpdate | None) -> dict | None:
     if not location:
         return None
     age_minutes = minutes_ago(location.captured_at)
-    is_online = location.connection_state.lower() == "online" and age_minutes <= 5
+    is_online = (
+        location.connection_state.lower() == "online" and age_minutes <= 5
+        and as_utc(location.captured_at) <= datetime.now(timezone.utc)
+    )
     return {
         "id": location.id,
         "patientId": location.patient_id,
@@ -186,7 +189,10 @@ def evaluate_safety(patient_id: str, db: Session) -> None:
     now_value = datetime.now(timezone.utc)
     if (
         settings
+        and settings.location_sharing_enabled
         and location
+        and 0 <= minutes_ago(location.captured_at) <= 5
+        and as_utc(location.captured_at) <= now_value
         and settings.safe_zone_latitude is not None
         and settings.safe_zone_longitude is not None
     ):
@@ -196,7 +202,21 @@ def evaluate_safety(patient_id: str, db: Session) -> None:
             location.latitude,
             location.longitude,
         )
-        if distance > settings.safe_zone_radius_m + location.accuracy_m:
+        # A very imprecise fix cannot support a safe-zone conclusion. Surface
+        # that limitation to caregivers instead of implying the patient left.
+        if location.accuracy_m > max(150, settings.safe_zone_radius_m):
+            ensure_alert(
+                patient_id,
+                "location_accuracy_low",
+                "medium",
+                (
+                    f"Location accuracy is low (+/- {round(location.accuracy_m)} m). "
+                    "Safe-zone status cannot be confirmed."
+                ),
+                db,
+                location.id,
+            )
+        elif distance > settings.safe_zone_radius_m + location.accuracy_m:
             ensure_alert(
                 patient_id,
                 "safe_zone_exit",
@@ -238,3 +258,13 @@ def evaluate_safety(patient_id: str, db: Session) -> None:
             item.escalated_to_priority = 2
             item.escalated_at = now_value
     db.commit()
+
+
+def evaluate_all_safety(db: Session) -> int:
+    """Run deterministic late-return/stale checks without a dashboard visit."""
+    patient_ids = [
+        item.patient_id for item in db.query(SafetySettings.patient_id).all()
+    ]
+    for patient_id in patient_ids:
+        evaluate_safety(patient_id, db)
+    return len(patient_ids)

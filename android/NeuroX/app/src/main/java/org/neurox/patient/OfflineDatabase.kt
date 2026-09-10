@@ -22,7 +22,10 @@ data class PendingSyncEntity(
     val createdAt: Long,
     val status: String = "pending",
     val retryCount: Int = 0,
-    val lastError: String? = null
+    val lastError: String? = null,
+    val schemaVersion: Int = 1,
+    val deviceTime: String,
+    val origin: String = "android",
 )
 
 @Entity(tableName = "cached_patient")
@@ -69,12 +72,14 @@ data class CachedSnapshotEntity(
 
 @Dao
 interface PendingSyncDao {
+    @Query("SELECT COUNT(*) FROM pending_sync_events WHERE status = 'failed'")
+    suspend fun countFailed(): Int
     @Query("SELECT COUNT(*) FROM pending_sync_events")
     suspend fun countAll(): Int
-    @Query("SELECT * FROM pending_sync_events WHERE status = 'pending' ORDER BY createdAt ASC")
+    @Query("SELECT * FROM pending_sync_events WHERE status IN ('pending', 'retry') ORDER BY createdAt ASC")
     suspend fun getAll(): List<PendingSyncEntity>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(event: PendingSyncEntity)
 
     @Query("DELETE FROM pending_sync_events WHERE eventId IN (:eventIds)")
@@ -82,6 +87,12 @@ interface PendingSyncDao {
 
     @Query("UPDATE pending_sync_events SET status = 'failed', lastError = :error, retryCount = retryCount + 1 WHERE eventId IN (:eventIds)")
     suspend fun markFailed(eventIds: List<String>, error: String)
+
+    @Query("UPDATE pending_sync_events SET status = 'retry', lastError = :error, retryCount = retryCount + 1 WHERE eventId IN (:eventIds)")
+    suspend fun markRetry(eventIds: List<String>, error: String)
+
+    @Query("UPDATE pending_sync_events SET status = 'pending', lastError = NULL WHERE status = 'failed'")
+    suspend fun retryDeadLetters()
 }
 
 @Dao
@@ -126,7 +137,7 @@ interface OfflineCacheDao {
     suspend fun saveSnapshot(snapshot: CachedSnapshotEntity)
 }
 
-@Database(entities = [PendingSyncEntity::class, CachedPatientEntity::class, CachedActivityEntity::class, CachedReminderEntity::class, CachedSnapshotEntity::class], version = 6, exportSchema = false)
+@Database(entities = [PendingSyncEntity::class, CachedPatientEntity::class, CachedActivityEntity::class, CachedReminderEntity::class, CachedSnapshotEntity::class], version = 7, exportSchema = false)
 abstract class OfflineDatabase : androidx.room.RoomDatabase() {
     abstract fun pendingSyncDao(): PendingSyncDao
     abstract fun offlineCacheDao(): OfflineCacheDao
@@ -154,7 +165,7 @@ abstract class OfflineDatabase : androidx.room.RoomDatabase() {
                 context.applicationContext,
                 OfflineDatabase::class.java,
                 "neurox-offline.db"
-            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6).build()
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7).build()
 
         private fun openWithRecovery(context: Context): OfflineDatabase {
             val candidate = build(context)
@@ -216,6 +227,14 @@ abstract class OfflineDatabase : androidx.room.RoomDatabase() {
                 database.execSQL("ALTER TABLE cached_reminders ADD COLUMN status TEXT NOT NULL DEFAULT 'upcoming'")
                 database.execSQL("ALTER TABLE cached_reminders ADD COLUMN snoozedUntil TEXT")
                 database.execSQL("ALTER TABLE cached_reminders ADD COLUMN timezoneName TEXT NOT NULL DEFAULT 'Asia/Kolkata'")
+            }
+        }
+
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE pending_sync_events ADD COLUMN schemaVersion INTEGER NOT NULL DEFAULT 1")
+                database.execSQL("ALTER TABLE pending_sync_events ADD COLUMN deviceTime TEXT NOT NULL DEFAULT ''")
+                database.execSQL("ALTER TABLE pending_sync_events ADD COLUMN origin TEXT NOT NULL DEFAULT 'android'")
             }
         }
     }

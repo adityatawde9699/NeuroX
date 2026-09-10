@@ -30,6 +30,7 @@ enum class SyncState { Loading, Synced, Offline, Error }
 data class PatientUiState(
     val activities: List<ActivityItem> = defaultActivities,
     val reminders: List<ReminderItem> = emptyList(),
+    val history: List<ActivityHistoryItem> = emptyList(),
     val safety: SafetyState? = null,
     val patientName: String = "",
     val patientAge: Int? = null,
@@ -37,6 +38,7 @@ data class PatientUiState(
     val activeActivity: String? = null,
     val syncState: SyncState = SyncState.Loading,
     val pendingCount: Int = 0,
+    val failedCount: Int = 0,
     val lastSyncedLabel: String? = null,
     val privacy: PrivacyState = PrivacyState(),
     val caregivers: List<CaregiverAccess> = emptyList(),
@@ -66,15 +68,21 @@ class PatientViewModel(
         refresh()
     }
 
-    fun refresh() {
+    fun refresh(manualRetry: Boolean = false) {
         if (refreshJob?.isActive == true) return
         refreshJob = viewModelScope.launch {
             mutableState.update { it.copy(syncState = SyncState.Loading) }
             try {
+                // A user-initiated retry is the only way a dead-letter event
+                // re-enters delivery; permanent validation failures never loop.
+                if (manualRetry) repository.retryFailedSync()
                 applyData(repository.load(), SyncState.Synced)
                 val pendingCount = repository.pendingEventCount()
+                val failedCount = repository.failedEventCount()
                 mutableState.update { it.copy(
-                    pendingCount = pendingCount, lastSyncedLabel = "just now"
+                    pendingCount = pendingCount, failedCount = failedCount,
+                    syncState = if (failedCount > 0) SyncState.Error else if (pendingCount > 0) SyncState.Offline else SyncState.Synced,
+                    lastSyncedLabel = if (pendingCount == 0 && failedCount == 0) "just now" else it.lastSyncedLabel,
                 ) }
                 loadPrivacy()
             } catch (error: CancellationException) {
@@ -88,6 +96,8 @@ class PatientViewModel(
             }
         }
     }
+
+    fun retrySync() = refresh(manualRetry = true)
 
     fun start(activity: ActivityItem) {
         if (startJob?.isActive == true || state.value.activeActivity != null) return
@@ -229,6 +239,25 @@ class PatientViewModel(
         }
     }
 
+    fun publishLocation(location: DeviceLocation) = viewModelScope.launch {
+        val request = LocationUpdateRequest(
+            latitude = location.latitude,
+            longitude = location.longitude,
+            accuracyM = location.accuracyM,
+            connectionState = "online",
+            capturedAt = location.capturedAt,
+        )
+        try {
+            repository.publishLocation(request)
+            mutableState.update { it.copy(syncState = SyncState.Synced) }
+        } catch (_: java.io.IOException) {
+            repository.queueLocation(request)
+            recoverOffline { }
+        } catch (_: Exception) {
+            mutableState.update { it.copy(syncState = SyncState.Error) }
+        }
+    }
+
     fun reportError() = mutableState.update { it.copy(syncState = SyncState.Error) }
 
     fun setLocationSharing(enabled: Boolean) = viewModelScope.launch {
@@ -304,7 +333,7 @@ class PatientViewModel(
 
     private fun applyData(data: RemoteData, sync: SyncState) = mutableState.update { current ->
         current.copy(
-            activities = data.activities, reminders = data.reminders, safety = data.safety,
+            activities = data.activities, reminders = data.reminders, history = data.history, safety = data.safety,
             patientName = data.patient.name, patientAge = data.patient.age,
             preferredLanguage = data.patient.preferredLanguage,
             syncState = sync,

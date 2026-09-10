@@ -133,6 +133,28 @@ def test_safe_zone_exit_alert_created_for_out_of_range_location(client):
     assert exit_alerts[0]["severity"] == "high"
 
 
+def test_low_accuracy_location_does_not_claim_safe_zone_exit(client):
+    email = f"accuracy-{uuid4().hex[:8]}@example.com"
+    reg = client.post("/auth/register", json={
+        "name": "Accuracy Test", "email": email, "password": "Testing!2026", "role": "PATIENT"
+    })
+    patient_id = reg.json()["user"]["id"]
+    headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
+    client.put(f"/patients/{patient_id}/safety/settings", headers=headers, json={
+        "safe_zone_name": "Home", "safe_zone_latitude": 26.1445,
+        "safe_zone_longitude": 91.7362, "safe_zone_radius_m": 250,
+    })
+    client.put("/patients/me/privacy/location-sharing", headers=headers, json={"enabled": True})
+    response = client.post(f"/patients/{patient_id}/location-updates", headers=headers, json={
+        "latitude": 26.2345, "longitude": 91.7362, "accuracy_m": 500,
+        "connection_state": "online", "captured_at": _iso(NOW),
+    })
+    assert response.status_code == 201
+    safety = client.get(f"/patients/{patient_id}/safety", headers=headers).json()
+    assert any(item["type"] == "location_accuracy_low" for item in safety["alerts"])
+    assert not any(item["type"] == "safe_zone_exit" for item in safety["alerts"])
+
+
 # ─────────────────────────────────────────────
 # Phase 6 — Late-return alert
 # ─────────────────────────────────────────────

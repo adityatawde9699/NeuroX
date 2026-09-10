@@ -17,7 +17,16 @@ data class ActivityItem(val id: String, val title: String, val description: Stri
 data class ReminderItem(val id: String, val title: String, val scheduledTime: String, val completed: Boolean, val description: String? = null, val type: String = "activity", val repeatRule: String? = null, val enabled: Boolean = true, val status: String = if (completed) "done" else "upcoming", val snoozedUntil: String? = null, val timezoneName: String = "Asia/Kolkata")
 data class ActivityStartRequest(@SerializedName("user_id") val userId: String, @SerializedName("difficulty_level") val difficultyLevel: Int, @SerializedName("started_at") val startedAt: String, @SerializedName("event_id") val eventId: String, @SerializedName("offline_created") val offlineCreated: Boolean = false, @SerializedName("content_version") val contentVersion: String = "legacy", @SerializedName("accessibility_mode") val accessibilityMode: String = "large-touch", @SerializedName("app_version") val appVersion: String = BuildConfig.VERSION_NAME, @SerializedName("model_version") val modelVersion: String = "adaptive-v1")
 data class ActivityCompletionRequest(@SerializedName("user_id") val userId: String, @SerializedName("activity_id") val activityId: String, @SerializedName("started_at") val startedAt: String, @SerializedName("completed_at") val completedAt: String, val accuracy: Float, @SerializedName("response_time") val responseTime: Float, val attempts: Int, @SerializedName("completion_status") val completionStatus: String = "completed", @SerializedName("difficulty_level") val difficultyLevel: Int, @SerializedName("offline_created") val offlineCreated: Boolean = false, @SerializedName("event_id") val eventId: String, @SerializedName("content_version") val contentVersion: String = "legacy", val interruptions: Int = 0, @SerializedName("accessibility_mode") val accessibilityMode: String = "large-touch", @SerializedName("app_version") val appVersion: String = BuildConfig.VERSION_NAME, @SerializedName("model_version") val modelVersion: String = "adaptive-v1")
-data class SyncEventRequest(@SerializedName("event_id") val eventId: String, @SerializedName("event_type") val eventType: String, @SerializedName("patient_id") val patientId: String, val payload: Map<String, Any>)
+data class SyncEventRequest(
+    @SerializedName("event_id") val eventId: String,
+    @SerializedName("event_type") val eventType: String,
+    @SerializedName("patient_id") val patientId: String,
+    val payload: Map<String, Any>,
+    @SerializedName("schema_version") val schemaVersion: Int = 1,
+    @SerializedName("device_time") val deviceTime: String? = null,
+    @SerializedName("attempt_count") val attemptCount: Int = 0,
+    val origin: String = "android",
+)
 data class SyncEventResult(@SerializedName("event_id") val eventId: String, val status: String, val result: Map<String, Any>? = null, val detail: String? = null)
 data class SyncEventsResponse(val results: List<SyncEventResult>)
 data class LocationUpdateRequest(val latitude: Double, val longitude: Double, @SerializedName("accuracy_m") val accuracyM: Double, @SerializedName("connection_state") val connectionState: String = "online", @SerializedName("captured_at") val capturedAt: String)

@@ -18,16 +18,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = true
         setContent { NeuroXApp() }
     }
 }
 
-private val Blue = Color(0xFF265FC5)
+private val Blue = Color(0xFF416A48)
 
 // ──────────────────────────────────────────────────────────────
 // Root application composable
@@ -37,7 +40,7 @@ private val Blue = Color(0xFF265FC5)
 fun NeuroXApp() {
     val auth: PatientAuthViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     val state by auth.state.collectAsState()
-    MaterialTheme(colorScheme = lightColorScheme(primary = Blue, background = Color(0xFFF8FAFD))) {
+    MaterialTheme(colorScheme = lightColorScheme(primary = Blue, background = Color(0xFFF4F8F1), surface = Color(0xFFFFFEFB))) {
         when {
             state.checking -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             !state.signedIn -> PatientSignInScreen(state, auth::signIn)
@@ -47,6 +50,7 @@ fun NeuroXApp() {
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun PatientApp(repository: PatientRepository) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var showVoiceScreen by rememberSaveable { mutableStateOf(false) }
@@ -57,6 +61,7 @@ fun PatientApp(repository: PatientRepository) {
     val ui by viewModel.state.collectAsState()
     LaunchedEffect(viewModel) { viewModel.refresh() }
     val context = LocalContext.current
+    val locationScope = rememberCoroutineScope()
     val notificationPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted -> if (granted) ReminderScheduler.scheduleAll(context, ui.reminders) }
@@ -71,7 +76,34 @@ fun PatientApp(repository: PatientRepository) {
     ) { granted ->
         if (granted) showVoiceScreen = true else viewModel.reportError()
     }
-    val speechProvider = remember { buildSpeechProvider(context, demoMode = BuildConfig.DEBUG) }
+    val locationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        if (permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        ) {
+            viewModel.setLocationSharing(true)
+            locationScope.launch {
+                DeviceLocationCapture(context).current()?.let(viewModel::publishLocation)
+            }
+        } else viewModel.reportError()
+    }
+
+    fun changeLocationSharing(enabled: Boolean) {
+        if (!enabled) {
+            viewModel.setLocationSharing(false)
+            return
+        }
+        val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        if (fine || coarse) {
+            viewModel.setLocationSharing(true)
+            locationScope.launch {
+                DeviceLocationCapture(context).current()?.let(viewModel::publishLocation)
+            }
+        } else locationPermission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+    }
+    val speechProvider = remember { buildSpeechProvider(context, demoMode = false) }
     val languageCode = remember(ui.preferredLanguage) { languageNameToCode(ui.preferredLanguage) }
     val languageConfig = remember(languageCode, speechProvider) {
         languageConfigFor(languageCode).copy(
@@ -98,40 +130,54 @@ fun PatientApp(repository: PatientRepository) {
             },
             onNavigateToSafety = {
                 showVoiceScreen = false
-                tab = 3
+                tab = 4
             },
             onClose = { showVoiceScreen = false },
         )
         return
     }
 
-    Scaffold(bottomBar = {
-        NavigationBar {
-            listOf(
-                "Home" to Icons.Default.Home,
-                "Activities" to Icons.Default.Favorite,
-                "Reminders" to Icons.Default.Notifications,
-                "Safety" to Icons.Default.Shield,
-                "Profile" to Icons.Default.Person,
-            ).forEachIndexed { index, (label, icon) ->
-                NavigationBarItem(
-                    selected = tab == index,
-                    onClick = {
-                        tab = index
-                        viewModel.leaveActivity()
+    Scaffold(
+        topBar = {
+            if (ui.activeActivity == null) {
+                TopAppBar(
+                    title = { Text("neuroX", color = Blue, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFFF4F8F1)),
+                    actions = {
+                        FilledIconButton(
+                            onClick = { tab = 5 },
+                            colors = IconButtonDefaults.filledIconButtonColors(containerColor = Color(0xFFDDEBD9), contentColor = Blue),
+                        ) {
+                            Icon(Icons.Default.Person, "Open profile")
+                        }
                     },
-                    icon = { Icon(icon, label) },
-                    label = { Text(label) },
                 )
             }
-        }
-    }) { padding ->
-        Column(Modifier.padding(padding)) {
+        },
+        bottomBar = {
+            PatientBottomNavigation(
+                selectedTab = tab,
+                onNavigate = { destination ->
+                    tab = destination
+                    viewModel.leaveActivity()
+                },
+                onOpenVoice = {
+                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                        showVoiceScreen = true
+                    } else {
+                        microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+                    }
+                },
+            )
+        },
+    ) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding)) {
             SyncBanner(
                 ui.syncState,
                 pendingCount = ui.pendingCount,
+                failedCount = ui.failedCount,
                 lastSyncedLabel = ui.lastSyncedLabel,
-                onRetry = viewModel::refresh,
+                onRetry = viewModel::retrySync,
             )
             when {
                 ui.activeActivity == "memory-match" -> MemoryMatch(
@@ -166,31 +212,23 @@ fun PatientApp(repository: PatientRepository) {
                 tab == 0 -> Home(
                     Modifier.weight(1f),
                     patientName = ui.patientName,
-                    safety = ui.safety,
                     reminders = ui.reminders,
-                    languageConfig = languageConfig,
-                    onStart = { viewModel.start(ui.activities.firstOrNull() ?: defaultActivities.first()) },
-                    onOpenVoice = {
-                        if (ContextCompat.checkSelfPermission(
-                                context, Manifest.permission.RECORD_AUDIO
-                            ) == PackageManager.PERMISSION_GRANTED
-                        ) {
-                            showVoiceScreen = true
-                        } else {
-                            microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
-                        }
-                    },
+                    activities = ui.activities,
+                    history = ui.history,
+                    onStart = viewModel::start,
+                    onReminders = { tab = 3 },
+                    onActivities = { tab = 1 },
                 )
                 tab == 1 -> Activities(
                     Modifier.weight(1f), activities = ui.activities, onStart = viewModel::start
                 )
-                tab == 2 -> Reminders(
+                tab == 3 -> Reminders(
                     Modifier.weight(1f),
                     reminders = ui.reminders,
                     onComplete = viewModel::completeReminder,
                     onSnooze = viewModel::snoozeReminder,
                 )
-                tab == 3 -> Safety(
+                tab == 4 -> Safety(
                     Modifier.weight(1f),
                     safety = ui.safety,
                     onHelp = { viewModel.sendHelp("I need help. Please check on me.") },
@@ -200,10 +238,54 @@ fun PatientApp(repository: PatientRepository) {
                     patientAge = ui.patientAge, languageConfig = languageConfig,
                     privacy = ui.privacy, caregivers = ui.caregivers,
                     privacyBusy = ui.privacyBusy, privacyMessage = ui.privacyMessage,
-                    onLocationSharingChanged = viewModel::setLocationSharing,
+                    onLocationSharingChanged = ::changeLocationSharing,
                     onRevokeCaregiver = viewModel::revokeCaregiver,
                     onConsentChanged = viewModel::setConsent)
             }
         }
     }
+}
+
+@Composable
+private fun PatientBottomNavigation(
+    selectedTab: Int,
+    onNavigate: (Int) -> Unit,
+    onOpenVoice: () -> Unit,
+) {
+    NavigationBar(containerColor = Color(0xFFFFFEFB), tonalElevation = 5.dp) {
+        BottomNavItem("Home", Icons.Default.Home, selectedTab == 0) { onNavigate(0) }
+        BottomNavItem("Activities", Icons.Default.Favorite, selectedTab == 1) { onNavigate(1) }
+        // Scaffold measures its bottom bar with the available screen height.
+        // A fillMaxHeight child expands the entire bar and consumes the content area.
+        Box(Modifier.weight(1f).height(80.dp), contentAlignment = Alignment.Center) {
+            FloatingActionButton(
+                onClick = onOpenVoice,
+                modifier = Modifier.offset(y = (-10).dp),
+                containerColor = Blue,
+                contentColor = Color.White,
+            ) { Icon(Icons.Default.Mic, "Speak to NeuroX") }
+        }
+        BottomNavItem("Reminders", Icons.Default.Notifications, selectedTab == 3) { onNavigate(3) }
+        BottomNavItem("SOS", Icons.Default.Warning, selectedTab == 4) { onNavigate(4) }
+    }
+}
+
+@Composable
+private fun RowScope.BottomNavItem(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    NavigationBarItem(
+        selected = selected,
+        onClick = onClick,
+        icon = { Icon(icon, label) },
+        label = { Text(label) },
+        colors = NavigationBarItemDefaults.colors(
+            selectedIconColor = Blue,
+            selectedTextColor = Blue,
+            indicatorColor = Color(0xFFDDEBD9),
+        ),
+    )
 }

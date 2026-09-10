@@ -6,7 +6,9 @@ interface PatientRepository {
     suspend fun load(): RemoteData
     suspend fun cachedData(): RemoteData?
     suspend fun pendingEventCount(): Int
+    suspend fun failedEventCount(): Int = 0
     fun schedulePendingSync()
+    suspend fun retryFailedSync() {}
     fun patientId(): String
     suspend fun startActivity(activity: ActivityItem, eventId: String, startedAt: String, offline: Boolean): Map<String, Any>
     suspend fun completeActivity(activity: ActivityItem, request: ActivityCompletionRequest): SyncResult
@@ -18,6 +20,11 @@ interface PatientRepository {
     suspend fun updateReminderStateLocally(reminderId: String, status: String, snoozedUntil: String? = null)
     suspend fun queueReminderState(reminderId: String, status: String, snoozedUntil: String? = null)
     suspend fun sendSos(request: SosRequest): Map<String, Any>
+    suspend fun publishLocation(request: LocationUpdateRequest): Map<String, Any> =
+        error("Location sharing is unavailable.")
+    suspend fun queueLocation(request: LocationUpdateRequest) {
+        error("Offline location sharing is unavailable.")
+    }
     suspend fun queueSos(request: SosRequest, eventId: String = UUID.randomUUID().toString())
     suspend fun privacy(): PrivacyState = PrivacyState()
     suspend fun caregivers(): List<CaregiverAccess> = emptyList()

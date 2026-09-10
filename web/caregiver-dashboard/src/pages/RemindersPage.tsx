@@ -5,6 +5,11 @@ import type { Reminder } from '../types/dashboard'
 const displayTime = (value: string) => new Date(value).toLocaleString([], {
   month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
 })
+const browserTimezone = () => {
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+  // Some Linux tzdata/browser combinations still emit this legacy alias.
+  return timezone === 'Asia/Calcutta' ? 'Asia/Kolkata' : timezone || 'Asia/Kolkata'
+}
 
 export function RemindersPage({patientId}:{patientId?:string}) {
   const [reminders, setReminders] = useState<Reminder[]>([])
@@ -28,7 +33,9 @@ export function RemindersPage({patientId}:{patientId?:string}) {
     if (!patientId || (type === 'medication' && !confirmed)) return
     setBusy(true); setError(''); setMessage('')
     try {
-      await dashboardApi.createReminder({patient_id:patientId, type, title:title.trim(), scheduled_time:new Date(scheduled).toISOString(), repeat_rule:repeat || null, timezone_name:Intl.DateTimeFormat().resolvedOptions().timeZone})
+      const scheduledDate = new Date(scheduled)
+      if (Number.isNaN(scheduledDate.getTime())) throw new Error('Choose a valid local date and time.')
+      await dashboardApi.createReminder({patient_id:patientId, type, title:title.trim(), scheduled_time:scheduledDate.toISOString(), repeat_rule:repeat || null, timezone_name:browserTimezone()})
       setTitle(''); setScheduled(''); setRepeat(''); setConfirmed(false)
       setMessage('Reminder schedule saved and sent to the patient app.')
       await load()

@@ -68,6 +68,9 @@ fun VoiceListeningScreen(
     var resolvedIntent by remember { mutableStateOf<VoiceIntent?>(null) }
     var showRemindersSheet by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    DisposableEffect(speechProvider) {
+        onDispose { speechProvider.stopListening() }
+    }
 
     // Pulsing animation while listening
     val infiniteTransition = rememberInfiniteTransition(label = "mic_pulse")
@@ -100,12 +103,16 @@ fun VoiceListeningScreen(
         )
     }
 
-    fun handleResult(text: String) {
+    fun handleResult(result: RecognitionResult) {
         isListening = false
-        transcript = text
-        val intent = IntentParser.parse(text, languageConfig.languageCode)
+        transcript = result.transcript
+        val intent = IntentParser.parse(result.transcript, languageConfig.languageCode)
         resolvedIntent = intent
-        statusMessage = IntentParser.describe(intent)
+        statusMessage = if (result.confidence != null && result.confidence < 0.65f) {
+            "I heard this with low confidence. Please check it, then Continue or Speak Again."
+        } else {
+            "I heard: ${IntentParser.describe(intent)}"
+        }
     }
 
     fun handleError(message: String) {
@@ -125,7 +132,7 @@ fun VoiceListeningScreen(
         scope.launch {
             speechProvider.startListening(
                 languageCode = languageConfig.languageCode,
-                onResult = ::handleResult,
+                    onResult = ::handleResult,
                 onError = ::handleError
             )
         }
@@ -280,7 +287,7 @@ fun VoiceListeningScreen(
                 shape = RoundedCornerShape(16.dp)
             ) {
                 Column(Modifier.padding(16.dp)) {
-                    Text("You said:", fontSize = 13.sp, color = Color.Gray)
+                    Text("I heard:", fontSize = 13.sp, color = Color.Gray)
                     Text(transcript, fontSize = 18.sp, color = Ink, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 4.dp))
                 }
             }

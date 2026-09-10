@@ -54,6 +54,10 @@ class Patient(Base):
     age: Mapped[int] = mapped_column(Integer)
     preferred_language: Mapped[str] = mapped_column(String(80), default="Assamese")
     next_difficulty: Mapped[int] = mapped_column(Integer, default=2)
+    personalization_override: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_difficulty_change_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 # CaregiverPatientAssignment model representing the relationship between caregivers and patients
@@ -264,6 +268,12 @@ class SyncEvent(Base):
     patient_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     event_type: Mapped[str] = mapped_column(String(48))
     payload: Mapped[dict] = mapped_column(JSON)
+    schema_version: Mapped[int] = mapped_column(default=1)
+    device_time: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    attempt_count: Mapped[int] = mapped_column(default=0)
+    origin: Mapped[str] = mapped_column(String(32), default="android")
     status: Mapped[str] = mapped_column(String(24), default="accepted")
     result: Mapped[dict] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

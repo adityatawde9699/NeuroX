@@ -18,9 +18,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-private val Blue = Color(0xFF265FC5)
-private val Ink = Color(0xFF172033)
-private val SafeGreen = Color(0xFF218567)
+private val Blue = Color(0xFF416A48)
+private val Ink = Color(0xFF1E2B22)
+private val SafeGreen = Color(0xFF4D9654)
 
 // ──────────────────────────────────────────────────────────────
 // Sync banner (Phase 5: pending count + last-synced label)
@@ -30,6 +30,7 @@ private val SafeGreen = Color(0xFF218567)
 internal fun SyncBanner(
     state: SyncState,
     pendingCount: Int = 0,
+    failedCount: Int = 0,
     lastSyncedLabel: String? = null,
     onRetry: () -> Unit
 ) {
@@ -44,7 +45,7 @@ internal fun SyncBanner(
             else
                 "Working offline · Showing saved activities"
         )
-        SyncState.Error   -> Color(0xFFFFF0ED) to "Could not sync your data"
+        SyncState.Error   -> Color(0xFFFFF0ED) to if (failedCount > 0) "$failedCount saved records need attention. Ask your caregiver for help." else "Could not sync your data"
     }
     Surface(color = bg, modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -63,79 +64,110 @@ internal fun SyncBanner(
 internal fun Home(
     modifier: Modifier,
     patientName: String,
-    safety: SafetyState?,
     reminders: List<ReminderItem>,
-    languageConfig: LanguageConfig,
-    onStart: () -> Unit,
-    onOpenVoice: () -> Unit
+    activities: List<ActivityItem>,
+    history: List<ActivityHistoryItem>,
+    onStart: (ActivityItem) -> Unit,
+    onReminders: () -> Unit,
+    onActivities: () -> Unit,
 ) = Column(
     modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
     verticalArrangement = Arrangement.spacedBy(18.dp)
 ) {
-    Text("Good Morning", fontSize = 20.sp, color = Color.Gray)
-    Text(patientName, fontSize = 36.sp, fontWeight = FontWeight.Bold, color = Ink)
+    Text("Hello, ${patientName.substringBefore(' ').ifBlank { "there" }}!", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = Ink)
+    Text("Take things at your own pace today.", fontSize = 17.sp, color = Color(0xFF6C786E))
 
-    // "Talk to NeuroX" card — now navigates to the listening screen
     Card(
-        colors = CardDefaults.cardColors(containerColor = Blue),
-        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFE5F0E1)),
+        shape = RoundedCornerShape(20.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("Talk to NeuroX", color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(13.dp))
-            FilledIconButton(
-                onClick = onOpenVoice,
-                modifier = Modifier.size(78.dp),
-                colors = IconButtonDefaults.filledIconButtonColors(containerColor = Color.White, contentColor = Blue)
-            ) {
-                Icon(Icons.Default.Mic, "Talk to NeuroX", Modifier.size(38.dp))
+        Row(Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+            Surface(color = Blue, shape = RoundedCornerShape(16.dp), modifier = Modifier.size(58.dp)) {
+                Icon(Icons.Default.Favorite, null, tint = Color.White, modifier = Modifier.padding(14.dp))
             }
-            Spacer(Modifier.height(10.dp))
-            Text("Tap and speak naturally", color = Color.White.copy(.88f), fontSize = 16.sp)
-            // Language capability note
-            if (!languageConfig.ttsSupported) {
-                Spacer(Modifier.height(6.dp))
-                Surface(
-                    color = Color.White.copy(alpha = 0.18f),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text(
-                        "Voice guides: English fallback",
-                        color = Color.White,
-                        fontSize = 12.sp,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                    )
-                }
+            Spacer(Modifier.width(16.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Today's gentle plan", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Ink)
+                Text("A short activity and your reminders are ready when you are.", color = Color(0xFF4D5B50), fontSize = 15.sp)
             }
         }
     }
 
-    Button(
-        onClick = onStart,
-        modifier = Modifier.fillMaxWidth().height(68.dp),
-        shape = RoundedCornerShape(18.dp)
-    ) {
-        Icon(Icons.Default.PlayArrow, null, Modifier.size(30.dp))
-        Spacer(Modifier.width(10.dp))
-        Text("Start Today's Activity", fontSize = 19.sp)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Upcoming reminders", modifier = Modifier.weight(1f), fontSize = 21.sp, fontWeight = FontWeight.Bold)
+        TextButton(onClick = onReminders) { Text("View all") }
     }
-
-    Text("Today's reminders", fontSize = 21.sp, fontWeight = FontWeight.Bold)
-    if (reminders.isEmpty()) {
-        Text("No reminders for today.", color = Color.Gray)
+    val upcoming = reminders.filter { it.enabled && !it.completed && it.status !in setOf("missed", "done") }
+        .sortedBy { it.snoozedUntil ?: it.scheduledTime }.take(2)
+    if (upcoming.isEmpty()) {
+        Card(colors = CardDefaults.cardColors(containerColor = Color.White), modifier = Modifier.fillMaxWidth()) {
+            Row(Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.CheckCircle, null, tint = Blue)
+                Spacer(Modifier.width(12.dp))
+                Text("You're all caught up. Your next reminders will appear here.", color = Color(0xFF4D5B50))
+            }
+        }
     } else {
-        reminders.take(3).forEach { reminder ->
-            ReminderCard(
-                title = reminder.title,
-                time = reminder.scheduledTime.take(16).replace("T", " "),
-                status = if (reminder.completed) "Done" else "Upcoming",
-                color = if (reminder.completed) SafeGreen else Blue
-            )
+        upcoming.forEach { reminder ->
+            HomeReminderCard(reminder)
         }
     }
-    StatusCard(safety?.status ?: "Safety status unavailable", "Last reported status", Icons.Default.Shield, Blue)
+
+    val recentIds = history.filter { it.completedAt != null }.sortedByDescending { it.completedAt }
+        .map { it.activityId }.distinct().take(2)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(if (recentIds.isEmpty()) "Try an activity" else "Recently played", modifier = Modifier.weight(1f), fontSize = 21.sp, fontWeight = FontWeight.Bold)
+        TextButton(onClick = onActivities) { Text("View all") }
+    }
+    val recent = recentIds.mapNotNull { id -> activities.firstOrNull { it.id == id } }
+        .ifEmpty { activities.take(2) }
+    recent.forEach { activity ->
+        HomeActivityCard(activity = activity, onClick = { onStart(activity) })
+    }
 }
+
+@Composable
+private fun HomeReminderCard(reminder: ReminderItem) = Card(
+    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFEFB)),
+    modifier = Modifier.fillMaxWidth(),
+) {
+    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Surface(color = Color(0xFFFFF1E6), shape = RoundedCornerShape(14.dp), modifier = Modifier.size(50.dp)) {
+            Icon(Icons.Default.Notifications, null, tint = Color(0xFFB65A38), modifier = Modifier.padding(13.dp))
+        }
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(reminder.title, fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
+            Text(displayReminderTime(reminder.snoozedUntil ?: reminder.scheduledTime), color = Color(0xFF59665C), fontSize = 14.sp)
+        }
+        Text(if (reminder.status == "snoozed") "Snoozed" else "Upcoming", color = Blue, fontSize = 13.sp)
+    }
+}
+
+@Composable
+private fun HomeActivityCard(activity: ActivityItem, onClick: () -> Unit) = Card(
+    modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+    colors = CardDefaults.cardColors(containerColor = Color.White),
+    shape = RoundedCornerShape(22.dp),
+    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFDDE7D9)),
+) {
+    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Default.PlayCircle, null, tint = Blue, modifier = Modifier.size(38.dp))
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(activity.title, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            Text(activity.description, color = Color(0xFF59665C), fontSize = 15.sp)
+        }
+        Icon(Icons.Default.ChevronRight, "Open activity", tint = Blue)
+    }
+}
+
+private fun displayReminderTime(value: String): String = runCatching {
+    java.time.OffsetDateTime.parse(value)
+        .atZoneSameInstant(java.time.ZoneId.systemDefault())
+        .format(java.time.format.DateTimeFormatter.ofPattern("h:mm a"))
+}.getOrElse { value.take(16).replace("T", " ") }
 
 // ──────────────────────────────────────────────────────────────
 // Activities screen
@@ -143,7 +175,7 @@ internal fun Home(
 
 @Composable
 internal fun Activities(modifier: Modifier, activities: List<ActivityItem>, onStart: (ActivityItem) -> Unit) =
-    Column(modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(15.dp)) {
+    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(15.dp)) {
         Text("Activities", fontSize = 31.sp, fontWeight = FontWeight.Bold)
         Text("Choose one activity for today.", color = Color.Gray, fontSize = 17.sp)
         if (activities.isEmpty()) Text("No activities are available right now.", color = Color.Gray)
@@ -416,36 +448,42 @@ internal fun Reminders(
     onComplete: (String) -> Unit,
     onSnooze: (String) -> Unit,
 ) =
-    Column(modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(15.dp)) {
-        Text("Reminders", fontSize = 31.sp, fontWeight = FontWeight.Bold)
-        Text("Today", color = Color.Gray, fontSize = 17.sp)
+    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Text("Today's schedule", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = Ink)
+        Text("Your reminders, in a simple order.", color = Color(0xFF6C786E), fontSize = 17.sp)
         if (reminders.isEmpty()) Text("No reminders for today.", color = Color.Gray)
         else reminders.forEach { reminder ->
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Notifications, null, tint = if (reminder.completed) SafeGreen else Blue)
-                        Spacer(Modifier.width(14.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(reminder.title, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                            Text(reminder.scheduledTime.take(16).replace("T", " "), color = Color.Gray)
-                        }
-                        Text(if (reminder.completed) "Done" else reminder.status.replaceFirstChar { it.uppercase() },
-                            color = if (reminder.completed) SafeGreen else Blue, fontWeight = FontWeight.SemiBold)
-                    }
-                    if (!reminder.completed && reminder.status != "missed") {
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            OutlinedButton(onClick = { onSnooze(reminder.id) }, modifier = Modifier.weight(1f).heightIn(min = 56.dp)) {
-                                Text("Snooze 10 min")
+            Row(verticalAlignment = Alignment.Top) {
+                Text(displayReminderTime(reminder.snoozedUntil ?: reminder.scheduledTime), modifier = Modifier.width(76.dp).padding(top = 17.dp), fontWeight = FontWeight.SemiBold, color = Ink)
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(26.dp).padding(top = 18.dp)) {
+                    Surface(color = if (reminder.completed) SafeGreen else Blue, shape = RoundedCornerShape(50), modifier = Modifier.size(14.dp)) {}
+                    Spacer(Modifier.height(72.dp))
+                }
+                Card(modifier = Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFEFB))) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Notifications, null, tint = if (reminder.completed) SafeGreen else Blue)
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(reminder.title, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                                Text(reminder.type.replaceFirstChar { it.uppercase() }, color = Color.Gray, fontSize = 14.sp)
                             }
-                            Button(onClick = { onComplete(reminder.id) }, modifier = Modifier.weight(1f).heightIn(min = 56.dp)) {
-                                Text("Done")
+                            Text(if (reminder.completed) "Done" else reminder.status.replaceFirstChar { it.uppercase() },
+                                color = if (reminder.completed) SafeGreen else Blue, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        }
+                        if (!reminder.completed && reminder.status != "missed") {
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                OutlinedButton(onClick = { onSnooze(reminder.id) }, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) {
+                                    Text("Snooze")
+                                }
+                                Button(onClick = { onComplete(reminder.id) }, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) {
+                                    Text("Done")
+                                }
                             }
                         }
-                    }
-                    if (reminder.type == "medication") {
-                        Text("This is a schedule reminder only. It does not give dosage advice or confirm medicine was taken.",
-                            color = Color.DarkGray, fontSize = 14.sp)
+                        if (reminder.type == "medication") {
+                            Text("Schedule reminder only — no dosage advice or consumption confirmation.", color = Color.DarkGray, fontSize = 13.sp)
+                        }
                     }
                 }
             }

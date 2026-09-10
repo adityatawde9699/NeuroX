@@ -6,6 +6,10 @@ import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.speech.tts.TextToSpeech
+import android.os.Handler
+import android.os.Looper
+import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -26,6 +30,8 @@ import org.json.JSONObject
  * before starting a listening session, so the UI can show a clear
  * fallback message rather than silently failing.
  */
+data class RecognitionResult(val transcript: String, val confidence: Float? = null)
+
 interface SpeechProvider {
     /** True if this provider can recognise speech for [languageCode]. */
     fun isSupported(languageCode: String): Boolean
@@ -35,10 +41,33 @@ interface SpeechProvider {
      * recognition ends, or [onError] with a human-readable message.
      * Must be called on the main thread.
      */
-    fun startListening(languageCode: String, onResult: (String) -> Unit, onError: (String) -> Unit)
+    fun startListening(languageCode: String, onResult: (RecognitionResult) -> Unit, onError: (String) -> Unit)
 
     /** Cancel an in-progress listening session without reporting a result. */
     fun stopListening()
+}
+
+/** Spoken guidance is intentionally independent from recognition and UI. */
+interface TtsProvider {
+    fun isSupported(languageCode: String): Boolean
+    fun speak(text: String, languageCode: String)
+    fun stop()
+    fun close()
+}
+
+class AndroidTtsProvider(context: Context) : TtsProvider {
+    private var ready = false
+    private val tts = TextToSpeech(context.applicationContext) { ready = it == TextToSpeech.SUCCESS }
+    override fun isSupported(languageCode: String): Boolean = ready &&
+        tts.isLanguageAvailable(Locale.forLanguageTag(languageCode)) >= TextToSpeech.LANG_AVAILABLE
+    override fun speak(text: String, languageCode: String) {
+        if (isSupported(languageCode)) {
+            tts.language = Locale.forLanguageTag(languageCode)
+            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "neurox-guide")
+        }
+    }
+    override fun stop() { tts.stop() }
+    override fun close() { tts.stop(); tts.shutdown() }
 }
 
 // ──────────────────────────────────────────────
@@ -64,13 +93,13 @@ class MockSpeechProvider : SpeechProvider {
 
     override fun isSupported(languageCode: String): Boolean = true
 
-    override fun startListening(languageCode: String, onResult: (String) -> Unit, onError: (String) -> Unit) {
+    override fun startListening(languageCode: String, onResult: (RecognitionResult) -> Unit, onError: (String) -> Unit) {
         // Simulate a short recognition delay, then return the next mock phrase.
         val result = phrases[index % phrases.size]
         index++
         // The caller supplies a coroutine scope; we call back synchronously here
         // because MockSpeechProvider is used only in controlled demo/test contexts.
-        onResult(result)
+        onResult(RecognitionResult(result, confidence = 0.99f))
     }
 
     override fun stopListening() { /* no-op */ }
@@ -88,11 +117,13 @@ class MockSpeechProvider : SpeechProvider {
  */
 class AndroidSpeechProvider(private val context: Context) : SpeechProvider {
     private var recognizer: SpeechRecognizer? = null
+    private val handler = Handler(Looper.getMainLooper())
+    private var timeout: Runnable? = null
 
     override fun isSupported(languageCode: String): Boolean =
         SpeechRecognizer.isRecognitionAvailable(context)
 
-    override fun startListening(languageCode: String, onResult: (String) -> Unit, onError: (String) -> Unit) {
+    override fun startListening(languageCode: String, onResult: (RecognitionResult) -> Unit, onError: (String) -> Unit) {
         stopListening() // ensure no stale session
 
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
@@ -113,13 +144,19 @@ class AndroidSpeechProvider(private val context: Context) : SpeechProvider {
             override fun onEvent(eventType: Int, params: Bundle?) {}
 
             override fun onResults(results: Bundle?) {
+                if (recognizer !== sr) return
+                clearTimeout()
                 val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 val top = matches?.firstOrNull()
-                if (top != null) onResult(top)
+                val confidence = results?.getFloatArray(SpeechRecognizer.CONFIDENCE_SCORES)
+                    ?.firstOrNull()?.takeIf { it >= 0f }
+                if (top != null) onResult(RecognitionResult(top, confidence))
                 else onError("Could not understand. Please try again.")
             }
 
             override fun onError(error: Int) {
+                if (recognizer !== sr) return
+                clearTimeout()
                 val message = when (error) {
                     SpeechRecognizer.ERROR_NO_MATCH -> "Could not understand. Please try again."
                     SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No speech detected. Please tap the microphone and speak."
@@ -139,15 +176,25 @@ class AndroidSpeechProvider(private val context: Context) : SpeechProvider {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, languageCode)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1_500L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1_500L)
         }
         sr.startListening(intent)
+        timeout = Runnable {
+            stopListening()
+            onError("Listening timed out. Please tap the microphone and try again.")
+        }.also { handler.postDelayed(it, 15_000L) }
     }
 
     override fun stopListening() {
-        recognizer?.stopListening()
-        recognizer?.destroy()
+        clearTimeout()
+        val previous = recognizer
         recognizer = null
+        previous?.cancel()
+        previous?.destroy()
     }
+
+    private fun clearTimeout() { timeout?.let(handler::removeCallbacks); timeout = null }
 }
 
 // ──────────────────────────────────────────────
@@ -160,9 +207,9 @@ class AndroidSpeechProvider(private val context: Context) : SpeechProvider {
  * so the UI will show the correct fallback message rather than crashing.
  */
 class WhisperSpeechProvider(private val baseUrl: String? = null) : SpeechProvider {
-    override fun isSupported(languageCode: String): Boolean = baseUrl != null
+    override fun isSupported(languageCode: String): Boolean = false
 
-    override fun startListening(languageCode: String, onResult: (String) -> Unit, onError: (String) -> Unit) {
+    override fun startListening(languageCode: String, onResult: (RecognitionResult) -> Unit, onError: (String) -> Unit) {
         onError("Whisper speech provider is not configured. Set a base URL to enable it.")
     }
 
@@ -230,7 +277,7 @@ class BHASHINISpeechProvider(
      * that BHASHINI cannot transcribe.
      */
     override fun isSupported(languageCode: String): Boolean =
-        apiKey != null && userId != null && languageCode in supportedLanguageCodes
+        false // Audio capture/secure server integration is not implemented yet.
 
     /**
      * Submits a recognition request to the BHASHINI Ulca ASR pipeline.
@@ -245,7 +292,7 @@ class BHASHINISpeechProvider(
      */
     override fun startListening(
         languageCode: String,
-        onResult: (String) -> Unit,
+        onResult: (RecognitionResult) -> Unit,
         onError: (String) -> Unit
     ) {
         if (!isSupported(languageCode)) {
@@ -313,7 +360,7 @@ class BHASHINISpeechProvider(
                     ?.optString("source", "")
                     ?: ""
                 withContext(Dispatchers.Main) {
-                    if (transcript.isNotBlank()) onResult(transcript)
+                    if (transcript.isNotBlank()) onResult(RecognitionResult(transcript, confidence = null))
                     else onError("BHASHINI returned an empty transcript. Please speak clearly and try again.")
                 }
             } catch (e: Exception) {

@@ -226,6 +226,14 @@ managed PostgreSQL point-in-time recovery, expected-load latency, uptime, and
 Android device/emulator recovery. The 99.5% availability/crash-free targets and
 P95 latency targets require measured pilot data; source code cannot prove them.
 
+## Production status correction for Phases 3–8
+
+The prototype milestones below are historical demo scope, not production
+completion. See `PRODUCTION_GAPS.md` for the current verified corrections and
+remaining implementation work. Some earlier descriptions overstated what the
+code implements, particularly remote speech, durable safety delivery, and
+complete offline synchronization.
+
 ## Phase 3 implementation status
 
 - The backend and Android catalog now contain all six planned activities:
@@ -258,10 +266,148 @@ P95 latency targets require measured pilot data; source code cannot prove them.
 
 ## Phase 3 acceptance status
 
-Phase 3 is **in progress**. Repository implementation covers the six activity
-flows, state capture, and the core reminder lifecycle. It is not accepted until
-the content and language review is approved and representative-device sessions
-verify TalkBack, font scaling, tremor/imprecise touch, low vision, hearing needs,
-cognitive load, process death, reboot restoration, and sustained offline use.
-The instrumentation tests compile locally but still require an Android device or
-emulator to execute.
+Phase 3 is **complete for the hackathon prototype**, following emulator and
+integrated backend/caregiver testing. Formal clinical review, representative
+device accessibility sessions, and sustained real-world use remain required for
+a pilot or production release.
+
+## Phase 4 implementation status
+
+- Android uses a Room-backed, append-only sync outbox. Each mutation has a stable
+  idempotency key, schema version, device timestamp, retry count, and origin.
+  Cached state and snapshots are persisted locally for offline operation and
+  checkpointed for bounded recovery.
+- WorkManager only runs sync with network and adequate battery, applies
+  exponential backoff, safely resumes after reboot/time changes, and the API
+  client refreshes expired native sessions before retrying an authenticated call.
+- The sync service persists an envelope for every accepted or rejected event and
+  treats re-delivery of the same event data as a duplicate rather than creating a
+  second activity, reminder action, SOS event, or location update. Stale location
+  events and reused IDs with different payloads are conflicts.
+- Transient transport/server failures remain retryable. Validation, access, and
+  conflict failures become visible dead-letter records; the patient can manually
+  retry them after correcting the underlying issue. The patient banner exposes
+  offline/pending state, while caregiver data reflects the last server update.
+
+## Phase 4 acceptance status
+
+Phase 4 is **complete for the hackathon prototype**. Automated Android and
+backend tests cover queued delivery and idempotency. The seven-day offline,
+intermittent-network, clock-drift, upgrade, and physical reboot scenarios still
+need a real-device endurance test before any production claim.
+
+## Phase 5 implementation status
+
+- Voice recognition and spoken guidance use independent `SpeechProvider` and
+  `TtsProvider` contracts. The app selects the deterministic offline demo
+  provider for debug builds and uses Android recognition on a configured
+  release device; BHASHINI remains an optional configured provider for Indian
+  regional-language ASR.
+- The Android recognizer requests microphone permission, applies a 15-second
+  timeout and silence limits, supports cancellation, reads confidence scores
+  when supplied by the platform, and always offers a large touch alternative.
+  Raw audio is not persisted by the application.
+- Voice commands are deterministic and allowlisted for activities, reminders,
+  and help. Help/SOS phrases have priority over every other command, including
+  mixed commands. Assamese and Hindi safety/reminder phrases are included in
+  the prototype allowlist.
+- The listening screen visibly states “I heard,” offers Speak Again and
+  Continue, and asks for confirmation when confidence is low. No voice command
+  supplies clinical or emergency advice; help only opens the safety workflow.
+
+## Phase 5 acceptance status
+
+Phase 5 is **complete for the hackathon prototype**. JVM tests cover safety
+intent precedence and regional allowlisted phrases, and the Android unit suite
+passes. Provider credentials, Assamese field evaluation sets, and measured
+intent-accuracy thresholds require consented real-user testing before any
+production or clinical-safety claim.
+
+## Phase 6 implementation status
+
+- SOS actions create a deterministic caregiver workflow immediately or enter
+  the durable offline sync outbox. Safe-zone exit, late-return, stale-location
+  labelling, acknowledgement, and primary-to-secondary escalation are evaluated
+  by shared backend logic and are visible in the caregiver dashboard.
+- Location sharing is consent-aware and revocable. Location records expose
+  freshness, accuracy, capture/receive times, and connection state. A poor
+  accuracy fix produces a “Location accuracy is low” alert rather than a
+  misleading safe-zone-exit conclusion.
+- The backend maintenance worker evaluates safety settings without requiring a
+  caregiver dashboard visit, allowing due late-return and escalation checks to
+  continue when the worker is deployed. Caregivers can acknowledge SOS and
+  safety events only for patients assigned to them; every acknowledgement is
+  audited.
+- Patient and caregiver UI copy makes the boundary explicit: NeuroX coordinates
+  configured caregivers and does not contact government or emergency services
+  directly.
+
+## Phase 6 acceptance status
+
+Phase 6 is **complete for the hackathon prototype**. Focused backend tests
+cover safe-zone, poor-accuracy, late-return, escalation, authorization,
+acknowledgement, and synced SOS paths. Production acceptance still requires a
+deployed always-on worker, FCM/SMS provider configuration, actual Android GPS
+capture, delivery telemetry, and a measured caregiver-notification response
+time; the emulator cannot validate these external services.
+
+## Phase 7 implementation status
+
+- NeuroX uses an explainable deterministic rule engine, not a diagnostic ML
+  model. It recommends only activity difficulty levels 1–5 from recent
+  same-activity completion, accuracy, and response-time signals. A change is
+  capped at one level and needs three consistent recent sessions.
+- Guardrails hold the current level after repeated interruptions and enforce a
+  24-hour cooldown after a level change. Patients and assigned caregivers can
+  set or clear a human-selected level; that override always takes precedence
+  and is audit logged.
+- Recommendations never change reminders, location, SOS workflows, or safety
+  settings. They are returned with plain-language reasons and activity sessions
+  retain the rule/model version for traceability. No dementia score, decline
+  prediction, diagnosis, or clinical advice is generated.
+
+## Phase 7 acceptance status
+
+Phase 7 is **complete for the hackathon prototype**. Deterministic rule and
+override tests pass. Any trained model, contextual bandit, or caregiver AI
+summary remains out of scope until consented pilot data, subgroup evaluation,
+clinical/privacy approval, model documentation, shadow-mode comparison, and a
+rollback drill are available.
+
+## Phase 8 implementation status
+
+- The caregiver dashboard supports assigned-patient workflows, patient-scoped
+  reminders, emergency contacts, safe-zone/expected-return setup, alert inbox
+  acknowledgement, notification preferences, account/session settings, and
+  patient access revocation.
+- Activity reports include date and activity filters, completion, accuracy,
+  response time, and difficulty. The UI explicitly distinguishes synced data
+  from missing/offline periods so a gap is never presented as a health trend.
+- Caregivers can download accessible CSV reports or use the browser print flow
+  to save a PDF. Both report surfaces carry the clear label “supportive
+  information, not a medical assessment.”
+- Safety and patient-facing screens include the limit of the workflow and
+  urgent-situation guidance: configured caregivers are coordinated, but no
+  government or emergency service is contacted directly.
+
+## Phase 8 acceptance status
+
+Phase 8 is **complete for the hackathon prototype**. The caregiver dashboard
+TypeScript check and 44 automated tests pass. Healthcare-worker accounts,
+organizational authorization, formal invitation workflows, and validated local
+respite/support directories require product, privacy, and partner decisions
+before production deployment.
+
+## Phase 9 verification status
+
+Phase 9 is **complete for the hackathon prototype**. The full backend suite
+(149 tests), Android unit/debug/release builds, release APK and manifest safety
+scan, and dashboard type check/test/production build all pass. The detailed
+local evidence and the mandatory pilot/release boundary are recorded in
+`PHASE9_VERIFICATION.md`.
+
+Phase 9 is **not a clinical or production-release certification**. Human
+usability, accessibility, Assamese-language, security, notification-delivery,
+and supervised-pilot evidence require real participants, external services, and
+independent review. NeuroX must not be the sole reminder, tracking, or emergency
+mechanism in any pilot.

@@ -1,7 +1,7 @@
 import { api, endSession, request } from './client'
 import type { AuthResponse, AuthUser, CaregiverPreferences, Contact, LanguageConfig, Patient, PerformanceData, Reminder, SafetyState, SecuritySession } from '../types/dashboard'
 
-export type ActivityReport = { patientId: string; summary: { sessions: number; completionRate: number; averageAccuracy: number; averageResponseTime: number; averageDifficulty: number }; series: Array<{date: string; completionRate: number; accuracy: number; responseTime: number; difficulty: number}>; note: string }
+export type ActivityReport = { patientId: string; truncated?: boolean; generatedAt?: string; summary: { sessions: number; completionRate: number; averageAccuracy: number; averageResponseTime: number; averageDifficulty: number }; series: Array<{date: string; completionRate: number; accuracy: number; responseTime: number; difficulty: number; offlineCreated?: boolean; modelVersion?: string}>; note: string }
 export type ActivityHistory = { id: string; activityId: string; startedAt: string; completedAt: string | null; accuracy: number | null; responseTime: number | null; attempts: number; status: string; difficulty: number }
 export type DashboardAlert = { id: string; kind: string; type?: string; severity?: string; status: string; message: string; createdAt: string; escalatedToPriority: number; workflowNote?: string }
 export type LocationHistoryItem = { id: string; latitude: number; longitude: number; accuracyM: number; connectionState: string; capturedAt: string; freshness: string; label: string }
