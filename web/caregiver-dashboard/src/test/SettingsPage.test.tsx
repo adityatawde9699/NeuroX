@@ -38,17 +38,17 @@ describe('SettingsPage sessions', () => {
 
   it('lists active sessions', async () => {
     mockSessions.mockResolvedValue([session])
-    render(<SettingsPage user={{id: 'u1', name: 'Caregiver', email: 'c@example.com', role: 'CAREGIVER'}} onUpdated={vi.fn()}/>)
+    render(<SettingsPage user={{id: 'u1', name: 'Caregiver', email: 'c@example.com', role: 'CAREGIVER'}} onUpdated={vi.fn()} onSignOut={vi.fn()}/>)
     await waitFor(() => expect(screen.getByText('NeuroX Web')).toBeInTheDocument())
-    expect(screen.getByRole('button', {name: 'Revoke'})).toBeInTheDocument()
+    expect(screen.getByRole('button', {name: /Revoke/i})).toBeInTheDocument()
   })
 
   it('revokes and removes a selected session', async () => {
     mockSessions.mockResolvedValue([session])
     mockRevoke.mockResolvedValue({revoked: true, session_id: session.id})
     const user = userEvent.setup()
-    render(<SettingsPage user={{id: 'u1', name: 'Caregiver', email: 'c@example.com', role: 'CAREGIVER'}} onUpdated={vi.fn()}/>)
-    await user.click(await screen.findByRole('button', {name: 'Revoke'}))
+    render(<SettingsPage user={{id: 'u1', name: 'Caregiver', email: 'c@example.com', role: 'CAREGIVER'}} onUpdated={vi.fn()} onSignOut={vi.fn()}/>)
+    await user.click(await screen.findByRole('button', {name: /Revoke/i}))
     expect(mockRevoke).toHaveBeenCalledWith(session.id)
     await waitFor(() => expect(screen.queryByText('NeuroX Web')).not.toBeInTheDocument())
   })
@@ -57,7 +57,7 @@ describe('SettingsPage sessions', () => {
     mockSessions.mockResolvedValue([])
     mockUpdatePreferences.mockResolvedValue({available: false, notifySos: true, notifySafetyAlerts: true, notifyReminders: true, updatedAt: '2026-09-10T09:00:00Z'})
     const user = userEvent.setup()
-    render(<SettingsPage user={{id: 'u1', name: 'Caregiver', email: 'c@example.com', role: 'CAREGIVER'}} onUpdated={vi.fn()}/>)
+    render(<SettingsPage user={{id: 'u1', name: 'Caregiver', email: 'c@example.com', role: 'CAREGIVER'}} onUpdated={vi.fn()} onSignOut={vi.fn()}/>)
     const availability = await screen.findByRole('checkbox', {name: /Available for alerts/})
     await user.click(availability)
     expect(mockUpdatePreferences).toHaveBeenCalledWith({available: false})
