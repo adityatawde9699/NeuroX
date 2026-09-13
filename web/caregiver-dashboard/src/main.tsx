@@ -605,8 +605,7 @@ function PatientSafetyScreen({ user, patient, safety, reload, signOut }: {
       <section className="patient-card" aria-labelledby="patient-safety-heading">
         <div className="patient-top">
           <div className="brand" style={{ paddingBottom: '20px' }}>
-            <span className="logo" aria-hidden="true">N</span>
-            <span>neuro<span>X</span></span>
+            <img className="brand-image" src="/neurox-logo.svg" alt="NeuroX" />
           </div>
           <button className="quiet" onClick={signOut} aria-label="Sign out">Sign out</button>
         </div>

@@ -49,8 +49,7 @@ export function AppSidebar({
     >
       {/* Brand */}
       <div className="brand">
-        <span className="logo" aria-hidden="true">N</span>
-        <span>neuro<span>X</span></span>
+        <img className="brand-image" src="/neurox-logo.svg" alt="NeuroX" />
         <button
           className="sidebar-close"
           aria-label="Close navigation"

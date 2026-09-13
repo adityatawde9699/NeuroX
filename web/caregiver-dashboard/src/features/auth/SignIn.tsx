@@ -108,8 +108,7 @@ export function SignIn({ onAuthenticated, notice }: Props) {
     <main className="auth-page">
       <section className="auth-card" aria-labelledby="auth-heading">
         <div className="brand" style={{ paddingBottom: 0 }}>
-          <span className="logo" aria-hidden="true">N</span>
-          <span>neuro<span>X</span></span>
+          <img className="brand-image" src="/neurox-logo.svg" alt="NeuroX" />
         </div>
 
         <p className="eyebrow" style={{ marginTop: 24 }}>CAREGIVER PORTAL</p>

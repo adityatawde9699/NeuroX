@@ -39,8 +39,7 @@ export function ResetPassword({ token }: { token: string }) {
     <main className="auth-page">
       <section className="auth-card" aria-labelledby="reset-heading">
         <div className="brand" style={{ paddingBottom: 0 }}>
-          <span className="logo" aria-hidden="true">N</span>
-          <span>neuro<span>X</span></span>
+          <img className="brand-image" src="/neurox-logo.svg" alt="NeuroX" />
         </div>
 
         <p className="eyebrow" style={{ marginTop: 24 }}>ACCOUNT RECOVERY</p>
@@ -159,8 +158,7 @@ export function VerifyEmail({ token }: { token: string }) {
     <main className="auth-page">
       <section className="auth-card" aria-labelledby="verify-heading">
         <div className="brand" style={{ paddingBottom: 0 }}>
-          <span className="logo" aria-hidden="true">N</span>
-          <span>neuro<span>X</span></span>
+          <img className="brand-image" src="/neurox-logo.svg" alt="NeuroX" />
         </div>
 
         <p className="eyebrow" style={{ marginTop: 24 }}>EMAIL VERIFICATION</p>

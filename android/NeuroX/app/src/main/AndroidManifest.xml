@@ -14,6 +14,8 @@
         android:allowBackup="false"
         android:usesCleartextTraffic="false"
         android:theme="@style/Theme.NeuroX"
+        android:icon="@drawable/neurox_logo"
+        android:roundIcon="@drawable/neurox_logo"
         android:label="NeuroX">
         <activity
             android:name=".MainActivity"

@@ -9,6 +9,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.Image
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -17,6 +18,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -141,7 +144,14 @@ fun PatientApp(repository: PatientRepository) {
         topBar = {
             if (ui.activeActivity == null) {
                 TopAppBar(
-                    title = { Text("neuroX", color = Blue, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
+                    title = {
+                        Image(
+                            painter = painterResource(R.drawable.neurox_logo),
+                            contentDescription = "NeuroX",
+                            modifier = Modifier.size(64.dp),
+                            contentScale = ContentScale.Fit,
+                        )
+                    },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFFF4F8F1)),
                     actions = {
                         FilledIconButton(

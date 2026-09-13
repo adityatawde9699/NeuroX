@@ -1,6 +1,7 @@
 package org.neurox.patient
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -8,6 +9,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -21,6 +24,12 @@ fun PatientSignInScreen(state: PatientAuthState, onSignIn: (String, String, Stri
     var password by remember { mutableStateOf("") }
     Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        Image(
+            painter = painterResource(R.drawable.neurox_logo),
+            contentDescription = "NeuroX",
+            modifier = Modifier.size(190.dp),
+            contentScale = ContentScale.Fit,
+        )
         Text("Welcome to NeuroX", fontSize = 30.sp)
         Text("Ask your caregiver to help you sign in with your patient account.", fontSize = 20.sp)
         OutlinedTextField(server, { server = it }, label = { Text("Server address") },

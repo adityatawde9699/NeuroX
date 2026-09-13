@@ -116,11 +116,10 @@ python -m pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-Open `http://localhost:8000/docs`. On first startup, the API creates database tables and the demo caregiver account:
+Open `http://localhost:8000/docs`. In development, startup can create local demo fixtures (set `SEED_DEMO_DATA=false` to disable them):
 
 ```text
-Email:    anita@neurox.demo
-Password: NeuroXDemo!2026
+Email/password: configured by `DEMO_CAREGIVER_EMAIL` and `DEMO_CAREGIVER_PASSWORD`
 ```
 
 ### 4. Start the caregiver dashboard
@@ -151,7 +150,9 @@ address and patient email/password. Debug builds suggest `http://10.0.2.2:8000/`
 for the emulator; on a physical device enter the development machine's LAN
 address. Release builds start with an empty server field and require HTTPS.
 
-For local demo testing, enter `maya@neurox.demo` / `NeuroXDemo!2026` manually.
+For local demo testing, use the credentials configured by `DEMO_PATIENT_EMAIL` and
+`DEMO_PATIENT_PASSWORD`. Demo fixtures are disabled automatically outside development;
+production accounts must be provisioned through the supported registration/admin flow.
 Patient sign-in requires a provisioned patient profile; public registration
 alone does not create one. The app retains its patient/server binding across
 session expiry to protect offline records. It does not support switching

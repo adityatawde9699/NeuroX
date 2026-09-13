@@ -53,3 +53,10 @@ Thumbs.db
 tmp/
 temp/
 *.log
+
+# Restricted research data (keep only data/README.md under version control)
+data/raw/
+data/processed/
+data/derived/
+data/*.zip
+data/*.tar.gz

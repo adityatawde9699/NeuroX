@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 import os
+from app.config import DEMO_CAREGIVER_EMAIL, DEMO_CAREGIVER_PASSWORD, DEMO_PATIENT_EMAIL, DEMO_PATIENT_PASSWORD, SEED_DEMO_DATA
 from sqlalchemy.orm import Session
 from app.auth import hash_password
 from app.database import Base, engine
@@ -18,30 +19,30 @@ from app.schemas import (
 
 
 def _seed_database() -> None:
-    """Idempotent seed for demo data; runs once at startup."""
-    if os.getenv("APP_ENV", "development").lower() != "development":
+    """Idempotent development fixture seed; never runs outside development."""
+    if not SEED_DEMO_DATA:
         return
     Base.metadata.create_all(bind=engine)
     with Session(bind=engine) as db:
-        if not db.query(User).filter(User.email == "anita@neurox.demo").first():
+        if not db.query(User).filter(User.email == DEMO_CAREGIVER_EMAIL).first():
             db.add(
                 User(
                     id="caregiver-anita",
                     name="Anita Devi",
-                    email="anita@neurox.demo",
+                    email=DEMO_CAREGIVER_EMAIL,
                     role=Role.CAREGIVER.value,
-                    password_hash=hash_password("NeuroXDemo!2026"),
+                    password_hash=hash_password(DEMO_CAREGIVER_PASSWORD),
                 )
             )
             db.commit()
-        if not db.query(User).filter(User.email == "maya@neurox.demo").first():
+        if not db.query(User).filter(User.email == DEMO_PATIENT_EMAIL).first():
             db.add(
                 User(
                     id="maya-demo",
                     name="Maya Devi",
-                    email="maya@neurox.demo",
+                    email=DEMO_PATIENT_EMAIL,
                     role=Role.PATIENT.value,
-                    password_hash=hash_password("NeuroXDemo!2026"),
+                    password_hash=hash_password(DEMO_PATIENT_PASSWORD),
                 )
             )
             db.commit()

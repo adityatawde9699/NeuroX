@@ -121,7 +121,9 @@ class AndroidSpeechProvider(private val context: Context) : SpeechProvider {
     private var timeout: Runnable? = null
 
     override fun isSupported(languageCode: String): Boolean =
-        SpeechRecognizer.isRecognitionAvailable(context)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S)
+            SpeechRecognizer.isOnDeviceRecognitionAvailable(context) || SpeechRecognizer.isRecognitionAvailable(context)
+        else SpeechRecognizer.isRecognitionAvailable(context)
 
     override fun startListening(languageCode: String, onResult: (RecognitionResult) -> Unit, onError: (String) -> Unit) {
         stopListening() // ensure no stale session
@@ -131,7 +133,10 @@ class AndroidSpeechProvider(private val context: Context) : SpeechProvider {
             return
         }
 
-        val sr = SpeechRecognizer.createSpeechRecognizer(context)
+        val sr = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S &&
+            SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
+        ) SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+        else SpeechRecognizer.createSpeechRecognizer(context)
         recognizer = sr
 
         sr.setRecognitionListener(object : RecognitionListener {
@@ -161,7 +166,7 @@ class AndroidSpeechProvider(private val context: Context) : SpeechProvider {
                     SpeechRecognizer.ERROR_NO_MATCH -> "Could not understand. Please try again."
                     SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No speech detected. Please tap the microphone and speak."
                     SpeechRecognizer.ERROR_AUDIO -> "Microphone error. Please check your device microphone."
-                    SpeechRecognizer.ERROR_NETWORK -> "Network error during speech recognition."
+                    SpeechRecognizer.ERROR_NETWORK -> "Offline speech recognition is unavailable. Install the language pack or reconnect to use BHASHINI."
                     SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED,
                     SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE -> "Speech recognition is not available for this language."
                     else -> "Speech recognition failed. Please try again."
@@ -176,6 +181,7 @@ class AndroidSpeechProvider(private val context: Context) : SpeechProvider {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, languageCode)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1_500L)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1_500L)
         }

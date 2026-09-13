@@ -159,6 +159,15 @@ aside {
 }
 .brand span span { color: var(--accent); }
 
+.brand-image {
+  display: block;
+  width: 120px;
+  height: 96px;
+  object-fit: cover;
+  object-position: left center;
+  border-radius: var(--radius-sm);
+}
+
 .logo {
   width: 34px;
   height: 34px;

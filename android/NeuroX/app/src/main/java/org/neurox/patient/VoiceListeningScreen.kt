@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -295,13 +296,27 @@ fun VoiceListeningScreen(
         }
 
         // ── Status / confirmation message ─────────────────────────────
-        Text(
-            text = statusMessage,
-            fontSize = 16.sp,
-            color = if (resolvedIntent is VoiceIntent.Unknown) Color(0xFFB65A38) else Color.Gray,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 28.dp)
-        )
+        val hasError = statusMessage.contains("failed", ignoreCase = true) || statusMessage.contains("not available", ignoreCase = true)
+        Surface(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+            color = if (hasError) Color(0xFFFFF1F0) else Color.Transparent,
+            shape = RoundedCornerShape(14.dp),
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = if (hasError) 13.dp else 0.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                if (hasError) Icon(Icons.Default.Info, contentDescription = null, tint = Color(0xFFB4423C))
+                Text(
+                    text = statusMessage,
+                    fontSize = 16.sp,
+                    color = if (hasError || resolvedIntent is VoiceIntent.Unknown) Color(0xFFB4423C) else Color.Gray,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
 
         Spacer(Modifier.height(20.dp))
 
@@ -384,7 +399,7 @@ private fun LanguageCapabilityCard(config: LanguageConfig) {
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(config.languageName, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Ink)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 5.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 5.dp).horizontalScroll(rememberScrollState())) {
                     CapabilityPill("Speech", config.speechSupported)
                     CapabilityPill("Voice guides", config.ttsSupported)
                     if (config.bhashinSupported) {

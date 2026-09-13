@@ -28,8 +28,7 @@ export class AppErrorBoundary extends Component<{ children: ReactNode }, State> 
               <AlertTriangle size={26} />
             </div>
             <div className="brand" style={{ justifyContent: 'center', paddingBottom: '20px' }}>
-              <span className="logo">N</span>
-              <span>neuro<span>X</span></span>
+              <img className="brand-image" src="/neurox-logo.svg" alt="NeuroX" />
             </div>
             <p className="eyebrow">RECOVERY</p>
             <h1 id="recovery-heading">The dashboard could not be displayed</h1>

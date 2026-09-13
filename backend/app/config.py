@@ -22,7 +22,22 @@ RATE_LIMIT_ENABLED = (
     APP_ENV in {"staging", "production"}
     or os.getenv("RATE_LIMIT_ENABLED", "false").lower() == "true"
 )
+# Demo fixtures are strictly a development convenience. They are disabled for
+# every non-development environment, regardless of the value supplied here.
+SEED_DEMO_DATA = APP_ENV == "development" and os.getenv("SEED_DEMO_DATA", "true").lower() == "true"
+DEMO_CAREGIVER_EMAIL = os.getenv("DEMO_CAREGIVER_EMAIL", "anita@neurox.demo").strip().lower()
+DEMO_CAREGIVER_PASSWORD = os.getenv("DEMO_CAREGIVER_PASSWORD", "NeuroXDemo!2026")
+DEMO_PATIENT_EMAIL = os.getenv("DEMO_PATIENT_EMAIL", "maya@neurox.demo").strip().lower()
+DEMO_PATIENT_PASSWORD = os.getenv("DEMO_PATIENT_PASSWORD", DEMO_CAREGIVER_PASSWORD)
 REDIS_URL = setting("REDIS_URL")
+FCM_ENABLED = os.getenv("FCM_ENABLED", "false").lower() == "true"
+BHASHINI_ENABLED = os.getenv("BHASHINI_ENABLED", "false").lower() == "true"
+if FCM_ENABLED:
+    if not os.getenv("FIREBASE_PROJECT_ID") or not setting("FIREBASE_SERVICE_ACCOUNT_JSON"):
+        raise RuntimeError("FCM_ENABLED requires FIREBASE_PROJECT_ID and a Firebase service-account secret.")
+if BHASHINI_ENABLED:
+    if not os.getenv("BHASHINI_USER_ID") or not setting("BHASHINI_API_KEY") or not os.getenv("BHASHINI_PIPELINE_ID"):
+        raise RuntimeError("BHASHINI_ENABLED requires BHASHINI_USER_ID, BHASHINI_API_KEY, and BHASHINI_PIPELINE_ID.")
 if APP_ENV in {"staging", "production"}:
     if not os.getenv("CORS_ORIGINS") or not CORS_ORIGINS:
         raise RuntimeError(
