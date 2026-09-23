@@ -1,7 +1,7 @@
 """Fail closed on unknown environments and unsafe deployed origins."""
 
 import os
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 from app.secrets import setting
 
@@ -32,7 +32,20 @@ DEMO_CAREGIVER_EMAIL = os.getenv("DEMO_CAREGIVER_EMAIL", "anita@neurox.demo").st
 DEMO_CAREGIVER_PASSWORD = os.getenv("DEMO_CAREGIVER_PASSWORD", "NeuroXDemo!2026")
 DEMO_PATIENT_EMAIL = os.getenv("DEMO_PATIENT_EMAIL", "maya@neurox.demo").strip().lower()
 DEMO_PATIENT_PASSWORD = os.getenv("DEMO_PATIENT_PASSWORD", DEMO_CAREGIVER_PASSWORD)
+# Upstash exposes a REST URL and token in its dashboard. Convert that pair to
+# the TLS Redis URL used by redis-py when REDIS_URL is not supplied directly.
 REDIS_URL = setting("REDIS_URL")
+upstash_rest_url = os.getenv("UPSTASH_REDIS_REST_URL", "").strip()
+upstash_token = setting("UPSTASH_REDIS_REST_TOKEN")
+if upstash_rest_url and upstash_token and (
+    not REDIS_URL or not REDIS_URL.startswith(("redis://", "rediss://"))
+):
+    upstash_endpoint = urlsplit(upstash_rest_url)
+    if upstash_endpoint.scheme == "https" and upstash_endpoint.hostname:
+        REDIS_URL = (
+            f"rediss://default:{quote(upstash_token, safe='')}"
+            f"@{upstash_endpoint.hostname}:6379"
+        )
 COGNITIVE_MODEL_PATH = os.getenv("COGNITIVE_MODEL_PATH", "").strip()
 COGNITIVE_MODEL_SHA256 = os.getenv("COGNITIVE_MODEL_SHA256", "").strip().lower()
 FCM_ENABLED = os.getenv("FCM_ENABLED", "false").lower() == "true"

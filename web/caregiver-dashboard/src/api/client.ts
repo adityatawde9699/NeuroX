@@ -1,7 +1,9 @@
 import type { AuthResponse } from '../types/dashboard'
 import { clearSession, readAccessToken, sessionVersion, storeSession } from '../auth/authStorage'
 
-const apiUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+// Environment URLs are commonly entered with a trailing slash. Normalize it
+// once so route paths never become `//auth/...` and trigger a proxy/404 path.
+const apiUrl = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000').replace(/\/+$/, '')
 
 export class ApiError extends Error {
   constructor(public readonly status: number, message: string) {
